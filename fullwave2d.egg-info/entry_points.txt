@@ -1,0 +1,2 @@
+[console_scripts]
+submit = fullwave2d.submitter.submit_job:main
