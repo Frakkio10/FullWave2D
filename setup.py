@@ -8,9 +8,13 @@ setup(
     description='',
     packages=find_packages(),  # Automatically discover and include all packages
     install_requires=[
-        # List the dependencies your package needs
-        # 'dependency1',
-        # 'dependency2',
+        'numpy',
+        'scipy',
+        'matplotlib',
+        'pandas',
+        'h5py',
+        'mpi4py',
+        'matlabtools @ git+https://github.com/Frakkio10/matlabtools.git@master',
     ],
     classifiers=[
         # 'Development Status :: 3 - Alpha',
