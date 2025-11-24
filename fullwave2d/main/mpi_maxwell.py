@@ -7,6 +7,7 @@ from math import floor, ceil
 import h5py as h5
 #from fullwave2d.core.wrapper import fw2d_wrapper, InputData, OutputData
 from fullwave2d.core.wrapper import fw2d_wrapper, InputData, OutputData
+import copy 
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
@@ -363,11 +364,11 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         
         #reading h5 file 
         with h5.File(h5_filename, "r") as f:
-            Nt, Ny, Nx = f["fields/n"].shape
+            Nt, Ny, Nx = f["fields/n"][0,:].shape
             
         Ny_lin, Nx_lin = ne_lin.shape
-        if (Ny_lin, Nx_lin) != (Ny, Nx):
-            raise ValueError("Shape mismatch between ne_lin and HDF5 dataset")
+        # if (Ny_lin, Nx_lin) != (Ny, Nx):
+            # raise ValueError("Shape mismatch between ne_lin and HDF5 dataset")
 
         # Determine range
         if t_end is None:
@@ -404,15 +405,27 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
 
     # # Each rank processes its local timesteps
     with h5.File(h5_filename, "r") as f:
-        delta_ne = f["fields/n"]
+        n_txky = f["fields/n"][0,:]
 
         for i, t in enumerate(local_times):
-            delta_ne_t = delta_ne[t, :, :]
-            ne_tot = ne_lin * (1 + fluct_lvl * delta_ne_t)
-            input_data.ne = ne_tot.astype(np.double)
-
+            
+            local_inp = copy.deepcopy(input_data)
+            if rank == root:
+                local_inp.save_diag = True
+            else:
+                local_inp.save_diag = False
+                
+            delta_ne_t = np.fft.ifft(n_txky[t,:,:], axis=1).real.T
+            ne_tot = ne_lin * (1 + 0.02 * delta_ne_t)
+            ne_tot = ne_tot.astype(np.double)
+            # input_data.ne = ne_tot
+            #input_data.ne = delta_ne_t
             # Call fw2d_wrapper
-            amp, phase = fw2d_wrapper(input_data, rank == root)
+            local_inp.ne = ne_tot
+            # amp, phase = fw2d_wrapper(local_inp, rank == root)
+            amp, phase = fw2d_wrapper(local_inp)
+
+            # amp, phase = fw2d_wrapper(input_data, rank == root)
             outp_local[2*i] = amp
             outp_local[2*i+1] = phase
 

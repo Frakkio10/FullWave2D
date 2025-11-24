@@ -595,7 +595,7 @@ def fw2d_wrapper(inp, make_outp_dir=True):
 
     # TODO: implement subprocess option
     """
-    
+        
     if make_outp_dir and inp.save_diag:
 
         # Create a directory in which to store the output.
@@ -619,7 +619,9 @@ def fw2d_wrapper(inp, make_outp_dir=True):
     ne = np.flip(inp.ne, axis=0)
     ne = np.flip(ne, axis=1)
     # # The following line seems redundant but for some strange reason is absolutely necessary! :
-    ne = np.array(ne)
+    # ne = np.array(ne)
+    ne = np.ascontiguousarray(ne, dtype=np.double)
+
     # ne = np.array(inp.ne, dtype=np.double)  # preserve the correct orientation
 
     nepp = to_double_pointer(ne)
