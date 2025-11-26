@@ -364,7 +364,7 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         
         #reading h5 file 
         with h5.File(h5_filename, "r") as f:
-            Nt, Ny, Nx = f["fields/n"][0,:].shape
+            Nt, Ny, Nx = f["fields/n"][:].shape
             
         Ny_lin, Nx_lin = ne_lin.shape
         # if (Ny_lin, Nx_lin) != (Ny, Nx):
@@ -404,32 +404,30 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
     outp_local = np.zeros(len(local_times) * 2, dtype=float)
 
     # # Each rank processes its local timesteps
-    with h5.File(h5_filename, "r") as f:
-        n_txky = f["fields/n"][0,:]
 
-        for i, t in enumerate(local_times):
+    for i, t in enumerate(local_times):
             
-            local_inp = copy.deepcopy(input_data)
-            if rank == root:
-                local_inp.save_diag = True
-            else:
-                local_inp.save_diag = False
-                
-            delta_ne_t = np.fft.ifft(n_txky[t,:,:], axis=1).real.T
-            ne_tot = ne_lin * (1 + 0.02 * delta_ne_t)
-            ne_tot = ne_tot.astype(np.double)
-            # input_data.ne = ne_tot
-            #input_data.ne = delta_ne_t
-            # Call fw2d_wrapper
-            local_inp.ne = ne_tot
-            # amp, phase = fw2d_wrapper(local_inp, rank == root)
-            amp, phase = fw2d_wrapper(local_inp)
+        local_inp = copy.deepcopy(input_data)
+        if rank == root:
+            local_inp.save_diag = True
+        else:
+            local_inp.save_diag = False
+        
+        with h5.File(h5_filename, "r") as f:
+            n_xky = f["fields/n"][t,:].astype(np.complex128)
+        f.close()
+        
+        delta_ne = np.fft.irfft(n_xky, axis=1)
+        ne_tot = ne_lin * (1 + fluct_lvl * delta_ne)
+        local_inp.ne = ne_tot.T.astype(np.double)
+        # amp, phase = fw2d_wrapper(local_inp, rank == root)
+        amp, phase = fw2d_wrapper(local_inp)
 
-            # amp, phase = fw2d_wrapper(input_data, rank == root)
-            outp_local[2*i] = amp
-            outp_local[2*i+1] = phase
+        # amp, phase = fw2d_wrapper(input_data, rank == root)
+        outp_local[2*i] = amp
+        outp_local[2*i+1] = phase
 
-            print(f"[Rank {rank}] Finished timestep {t}")
+        print(f"[Rank {rank}] Finished timestep {t}")
     # Ensure chunks is always a list of arrays
     # if simulations_per_CPU == 1:
     #     chunks = [np.arange(Nt_sel)]  # single chunk with all timesteps
