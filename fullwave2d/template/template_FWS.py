@@ -16,7 +16,7 @@ import h5py as h5
 
 # Set up the parallelization 
 
-simulations_per_CPU = 3
+simulations_per_CPU = 1
 root = 0
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
@@ -28,21 +28,24 @@ save_diag = True if is_root else False
 
 filename = '/home/forlacchio/FlowWaveSim/output/h5/final_test/advection_ITG.h5'
 with h5.File(filename, "r") as f:
-    Nt, Ny, Nx = f["fields/n"][0,:].shape
-    n_txky   = f['fields/n'][0,:]
+    Nt, Ny, Nx = f["fields/n"].shape
+    n_0xky   = f['fields/n'][0,:].astype(np.complex128)
     x, y = f['grid/x'][()], f['grid/y'][()]
+    dx   = f.attrs['dx']
+    beta = f['spectrum/beta'][()]
+f.close()
 #%%
 #define the inputs parameters
 
-name            = f'advection_only_MPI_fl'
+name            = f'advection_ITG_lin'
 subdir          = 'test_FWS'
 mode            = 'O'
-f0, nx, ny, dx  = 60e9, Nx, Ny, x[1]
+f0, nx, ny, dx  = 60e9, x.size, y.size, dx
 b0              = 2.5
-waist, yante    = 30 * dx, int(ny / 2 - 350) * dx
-angle           = 10
+waist, yante    = 30 * dx, int(ny / 2 - 250) * dx
+angle           = 15
 spectrum        = 1
-nt              = 6000
+nt              = int(10e3)
 B0              = (b0 * np.ones([nx, ny])).astype(np.double)
 
 ne_lin = np.zeros((ny, nx))
@@ -52,16 +55,17 @@ n_cutoff   = 4e19
 
 
 for i in range(0, ny):
-    ne_lin[i,:] = -10 * (x - x.max()) * 1.2e19 + 3e19
+    ne_lin[:,i] = -10 * (x - x.max()) * 1.2e19 + 3e19
 
 #ne_lin = np.flip(ne_lin, axis = 0)
-delta_ne = np.fft.ifft(n_txky[0,:,:], axis=1).real.T
+delta_ne = np.fft.irfft(n_0xky, axis=1)
+ne_tot   = ne_lin * ( 1 + 0.02 * delta_ne)
 if size == 1:
-    plt.pcolormesh(x, y, ne_lin  , cmap = 'terrain')
+    plt.pcolormesh(x, y, ne_tot.T  , cmap = 'terrain')
     plt.colorbar()
 # %%
 inp = InputData(
-    header    = f'{subdir} simulation -- tilt angle {45} -- nt {nt}',
+    header    = f'{subdir} simulation -- tilt angle {beta} -- nt {nt}',
     name      = name,    
     subdir    = subdir,
     f0        = f0,
@@ -82,7 +86,7 @@ if not size==1:
 
     t0 = time.time()
     # outp_gathered = scatterv_maxwell_v2(ne_map, dn, dny, ysteps, inp, root=root)
-    outp_gathered = scatterv_maxwell_from_h5(inp, ne_lin, filename, t_start=0, t_end=None, root=0, fluct_lvl=0.02)
+    outp_gathered = scatterv_maxwell_from_h5(inp, ne_lin, filename, t_start=0, t_end=None, root=0, fluct_lvl=0.05)
     # save the results
     if rank == root:
         print(outp_gathered.shape)
@@ -91,9 +95,9 @@ if not size==1:
 
 else:
     t0 = time.time()
-    delta_ne = np.fft.ifft(n_txky[0,:,:], axis=1).real.T 
-    ne = ne_lin * ( 1 + 0 * delta_ne[0])
-    inp.ne = ne.astype(np.double)
+    delta_ne = np.fft.irfft(n_0xky, axis=1)
+    ne   = ne_lin * ( 1 + 0.05 * delta_ne)
+    inp.ne = ne.T.astype(np.double)
     fw2d_wrapper(inp)
     print('time (s) : ', time.time() - t0)
 # %%
@@ -110,7 +114,7 @@ if size == 1:
 
 
     im = ax.pcolormesh(x, y, inp.ne, cmap = 'terrain', alpha = 0.3)
-    # plt.colorbar(ax)
+    plt.colorbar(im)
     fig, ax = plt.subplots(2, 1, figsize = (10, 6), sharex = True)
     ax[0].set_title(r'Amplitude of $E_z$')
     ax[0].plot(outp.ampl, c = 'dodgerblue')
