@@ -339,7 +339,7 @@ def scatterv_maxwell_HW(HW_inp, input_data, t_start=0, t_end=None, root=0, **kwa
     
 
 def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
-                             t_start=0, t_end=None, root=0, *, fluct_lvl=0.05,):
+                             t_start=0, t_end=None, root=0, *, fluct_lvl=0.05, simulations_per_CPU = 1):
     """
     MPI-distributed execution of fw2d_wrapper over time steps in an HDF5 file.
     Each rank handles several timesteps sequentially.
@@ -371,19 +371,33 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
             # raise ValueError("Shape mismatch between ne_lin and HDF5 dataset")
 
         # Determine range
+        # if t_end is None:
+        #     # Default: each processor handles one timestep if possible
+        #     t_end = min(t_start + size, Nt)
         if t_end is None:
-            # Default: each processor handles one timestep if possible
-            t_end = min(t_start + size, Nt)
+            # Allow multiple simulations per CPU
+            max_timesteps = size * simulations_per_CPU
+            t_end = min(t_start + max_timesteps, Nt)
         if not (0 <= t_start < t_end <= Nt):
             raise ValueError(f"Invalid time range {t_start}:{t_end} for Nt={Nt}")
+        # Nt_sel = t_end - t_start
+
+        # # Compute balanced load: number of time steps per rank
+        # n_pproc = np.zeros(size, dtype=int)
+        # n_left = Nt_sel
+        # for i in range(size):
+        #     n_pproc[i] = ceil(n_left / (size - i))
+        #     n_left -= n_pproc[i]
         Nt_sel = t_end - t_start
 
-        # Compute balanced load: number of time steps per rank
+        # Explicitly assign simulations_per_CPU tasks per rank
         n_pproc = np.zeros(size, dtype=int)
-        n_left = Nt_sel
         for i in range(size):
-            n_pproc[i] = ceil(n_left / (size - i))
-            n_left -= n_pproc[i]
+            start_i = t_start + i * simulations_per_CPU
+            end_i   = start_i + simulations_per_CPU
+            if start_i >= t_end:
+                break
+            n_pproc[i] = max(0, min(simulations_per_CPU, t_end - start_i))
     else:
         Nt_sel, n_pproc, t_end = None, None, None
 

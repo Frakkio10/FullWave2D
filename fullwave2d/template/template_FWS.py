@@ -16,7 +16,7 @@ import h5py as h5
 
 # Set up the parallelization 
 
-simulations_per_CPU = 1
+simulations_per_CPU = 4
 root = 0
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
@@ -26,29 +26,34 @@ save_diag = True if is_root else False
 
 # %%
 
-filename = '/home/forlacchio/FlowWaveSim/output/h5/final_test/advection_ITG.h5'
+filename = '/home/forlacchio/FlowWaveSim/output/h5/final_test/advection.h5'
 with h5.File(filename, "r") as f:
     Nt, Ny, Nx = f["fields/n"].shape
     n_0xky   = f['fields/n'][0,:].astype(np.complex128)
     x, y = f['grid/x'][()], f['grid/y'][()]
     dx   = f.attrs['dx']
     beta = f['spectrum/beta'][()]
+    U0   = f.attrs['U0']
+
 f.close()
 #%%
 #define the inputs parameters
 
-name            = f'advection_ITG_lin'
-subdir          = 'test_FWS'
 mode            = 'O'
 f0, nx, ny, dx  = 60e9, x.size, y.size, dx
+#f0, nx, ny, dx  = 60e9, 1024, 1024, 2e-4
 b0              = 2.5
-waist, yante    = 30 * dx, int(ny / 2 - 250) * dx
+waist, yante    = 20 * dx, int(ny / 2 - 250) * dx
+# waist, yante    = 30 * dx, int(ny / 2) * dx
 angle           = 15
-spectrum        = 1
-nt              = int(10e3)
+nt              = int(500)
 B0              = (b0 * np.ones([nx, ny])).astype(np.double)
 
-ne_lin = np.zeros((ny, nx))
+subdir          = 'FWS_test_parallel'
+name            = f'advection_f{int(f0 * 1e-9)}_angle{angle}_waist{waist}'
+
+
+ne_lin = np.zeros((nx, ny))
 #linear density profile with the cutoff at pos%
 pos_cutoff = 0.2
 n_cutoff   = 4e19
@@ -59,9 +64,9 @@ for i in range(0, ny):
 
 #ne_lin = np.flip(ne_lin, axis = 0)
 delta_ne = np.fft.irfft(n_0xky, axis=1)
-ne_tot   = ne_lin * ( 1 + 0.02 * delta_ne)
+# ne_tot   = ne_lin * ( 1 + 0.05 * delta_ne)
 if size == 1:
-    plt.pcolormesh(x, y, ne_tot.T  , cmap = 'terrain')
+    plt.pcolormesh(x, y, ne_lin.T  , cmap = 'terrain')
     plt.colorbar()
 # %%
 inp = InputData(
@@ -86,7 +91,7 @@ if not size==1:
 
     t0 = time.time()
     # outp_gathered = scatterv_maxwell_v2(ne_map, dn, dny, ysteps, inp, root=root)
-    outp_gathered = scatterv_maxwell_from_h5(inp, ne_lin, filename, t_start=0, t_end=None, root=0, fluct_lvl=0.05)
+    outp_gathered = scatterv_maxwell_from_h5(inp, ne_lin, filename, t_start=0, t_end=None, root=0, fluct_lvl=0.02, simulations_per_CPU=simulations_per_CPU)
     # save the results
     if rank == root:
         print(outp_gathered.shape)
@@ -96,24 +101,25 @@ if not size==1:
 else:
     t0 = time.time()
     delta_ne = np.fft.irfft(n_0xky, axis=1)
-    ne   = ne_lin * ( 1 + 0.05 * delta_ne)
-    inp.ne = ne.T.astype(np.double)
+    ne   = ne_lin * ( 1 + 0.002 * delta_ne)
+    inp.ne = ne_lin.T.astype(np.double)
+    #inp.ne = ne_lin.T.astype(np.double)
     fw2d_wrapper(inp)
     print('time (s) : ', time.time() - t0)
 # %%
 if size == 1:
-    
+    name            = f'advection_f{int(f0 * 1e-9)}_angle{angle}_waist{waist}'
     inp       = InputData.load_pickle(name, subdir = subdir)
     outp      = OutputData(inp.name, subdir = inp.subdir)
 
     fig, ax = plt.subplots(figsize = (4, 4))
 
-    Ez = outp.ez[int(inp.TFSF/2) : inp.nx + int(inp.TFSF/2), int(inp.TFSF/2) : inp.ny + int(inp.TFSF/2)]
+    Ez = outp.ez[int(inp.TFSF/2) : inp.ny + int(inp.TFSF/2), int(inp.TFSF/2) : inp.nx + int(inp.TFSF/2)] # (ny, nx) -> ok for pcolormesh 
 
     ax.pcolormesh(x, y, np.flip(Ez, axis = 1), cmap = 'jet')
 
 
-    im = ax.pcolormesh(x, y, inp.ne, cmap = 'terrain', alpha = 0.3)
+    im = ax.pcolormesh(x, y, inp.ne.T, cmap = 'terrain', alpha = 0.3)
     plt.colorbar(im)
     fig, ax = plt.subplots(2, 1, figsize = (10, 6), sharex = True)
     ax[0].set_title(r'Amplitude of $E_z$')
