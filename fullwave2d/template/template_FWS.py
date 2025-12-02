@@ -1,9 +1,9 @@
 #%%
-from fullwave2d.main.mpi_maxwell import scatterv_maxwell_from_h5
+#from fullwave2d.main.mpi_maxwell import scatterv_maxwell_from_h5
 from fullwave2d.core.wrapper import fw2d_wrapper, InputData, OutputData
 # from fullwave2d import definitions
 import time
-from mpi4py import MPI
+#from mpi4py import MPI
 from numpy import pi
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,8 @@ from scipy.constants import c as C
 from matplotlib import colors
 import pickle
 import h5py as h5
-
+from config.definitions import HD5_DIR
+from pathlib import Path
 #%% 
 
 # Set up the parallelization 
@@ -26,7 +27,7 @@ save_diag = True if is_root else False
 
 # %%
 
-filename = '/home/forlacchio/FlowWaveSim/output/h5/final_test/advection.h5'
+filename = HD5_DIR.joinpath('final_test/advection_ITG.h5')
 with h5.File(filename, "r") as f:
     Nt, Ny, Nx = f["fields/n"].shape
     n_0xky   = f['fields/n'][0,:].astype(np.complex128)
@@ -34,11 +35,12 @@ with h5.File(filename, "r") as f:
     dx   = f.attrs['dx']
     beta = f['spectrum/beta'][()]
     U0   = f.attrs['U0']
-
 f.close()
 #%%
 #define the inputs parameters
 
+name            = f'advection_ITG_lin'
+subdir          = 'FWS'
 mode            = 'O'
 f0, nx, ny, dx  = 60e9, x.size, y.size, dx
 #f0, nx, ny, dx  = 60e9, 1024, 1024, 2e-4
@@ -70,7 +72,7 @@ if size == 1:
     plt.colorbar()
 # %%
 inp = InputData(
-    header    = f'{subdir} simulation -- tilt angle {beta} -- nt {nt}',
+    header    = f'{subdir} simulation -- tilt angle {beta} -- nt {nt} -- U0 {}',
     name      = name,    
     subdir    = subdir,
     f0        = f0,
