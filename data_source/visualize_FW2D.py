@@ -71,7 +71,7 @@ class FW2DVisualizer:
         if ax is None:
             fig, ax = plt.subplots(figsize=(4, 4))
 
-        im = ax.imshow(self.input.ne * 1e-19, cmap="Blues", origin="lower")
+        im = ax.imshow(self.input.ne * 1e-19, cmap="terrain", origin="lower")
         fig.colorbar(im, ax=ax, label=r"$n_e$ [$10^{19}$ m$^{-3}$]")
 
         if not kwargs.get("show_extent", False):
@@ -168,25 +168,25 @@ if __name__ == '__main__':
     beam = Struct.from_mat('/home/SR273822/data/DBSdata/processed/beamtracing/slab/simu_ref_gola_waist.mat', 'outp')
 
     subdir = 'mixed_advection_2'
-    simname = 'mixed_advection_2_f60_angle40_RC_waist150_1024'
+    simname = 'mixed_advection_2_f60_angle40_RC_waist150'
     # %matplotlib inline
     FW2d = FW2DVisualizer( subdir, simname = simname, machine = 'irene')
-    FW2d.plot_field()
-    FW2d.plot_time_evolution()
+    FW2d.plot_field(show_density = True)
+    # FW2d.plot_time_evolution()
     
     plt.show()
-    spectra = FW2DReader.get_doppler_spectra(
-            subdir, simname = simname, welch_spectra=True,
-            save_results=False, load_if_existing=True,
-            machine='irene'
-        )
-    print(spectra.fD_Lor,  spectra.fD)
-    # %matplotlib widget
-    fig, ax = plt.subplots(figsize = (5, 4))
-    FW2d.plot_spectra(show_fit = True, machine = 'irene', welch_spectra = False, ax  = ax, rem_left = 5, rem_right = 5, color = 'r')
-    plt.show()
+    # spectra = FW2DReader.get_doppler_spectra(
+    #         subdir, simname = simname, welch_spectra=True,
+    #         save_results=False, load_if_existing=True,
+    #         machine='irene'
+    #     )
+    # print(spectra.fD_Lor,  spectra.fD)
+    # # %matplotlib widget
+    # fig, ax = plt.subplots(figsize = (5, 4))
+    # FW2d.plot_spectra(show_fit = True, machine = 'irene', welch_spectra = False, ax  = ax, rem_left = 5, rem_right = 5, color = 'r')
+    # plt.show()
 
-    #rem_left = 30, rem_right = 40
+    # rem_left = 30, rem_right = 40
 
 #%%
     FWS_cyclonbase = Struct(

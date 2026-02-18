@@ -1,0 +1,10 @@
+numpy
+scipy
+matplotlib
+ipympl
+pandas
+tables
+scikit-image
+pyqtplotlib @ git+https://github.com/SaschaRienaecker/pyqtplotlib.git@master
+matlabtools @ git+ssh://git@github.com/Frakkio10/pythonmatlabtools.git@master
+plotfactory @ git+https://github.com/SaschaRienaecker/SR-plotfactory.git@master

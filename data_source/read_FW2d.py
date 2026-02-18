@@ -119,20 +119,22 @@ def FW2DSpectraVisualize(s, ax = None, show_curves=['rawPSD', 'fittedPSD', 'oddP
         xfit = np.linspace(np.min(s.f), np.max(s.f), 1000) / s.xscale
         if show_c == 'rawPSD':
             plot_semilog10((s.f - fD) / s.xscale, s.P + s.P_noise, ax = ax, c = color_dict['raw'], label = label_dict['raw'])
-        elif show_c in ['fit_gaussian', 'fit_lorentzian', 'fit_taylor']:
-            if show_c == 'fit_gaussian':
-                curve_type = show_c.split('_')[1]
-                yfit = gaussian(xfit , *s.fit_params.gaussian) * s.yscale + s.P_noise
-            elif show_c == 'fit_lorentzian':
-                curve_type = show_c.split('_')[1]
-                yfit = lorentzian(xfit , *s.fit_params.lorentzian) * s.yscale + s.P_noise
-            elif show_c == 'fit_taylor':
-                curve_type = show_c.split('_')[1]
-                yfit = taylor(xfit , *s.fit_params.taylor, dt = s.dt * s.xscale) * s.yscale + s.P_noise
-            plot_semilog10(xfit - fD / s.xscale , yfit, ax = ax, c = color_dict[curve_type], label = label_dict[curve_type])
+        # elif show_c in ['fit_gaussian', 'fit_lorentzian', 'fit_taylor']:
+        #     if show_c == 'fit_gaussian':
+        #         curve_type = show_c.split('_')[1]
+        #         yfit = gaussian(xfit , *s.fit_params.gaussian) * s.yscale + s.P_noise
+        #     elif show_c == 'fit_lorentzian':
+        #         curve_type = show_c.split('_')[1]
+        #         yfit = lorentzian(xfit , *s.fit_params.lorentzian) * s.yscale + s.P_noise
+        #     elif show_c == 'fit_taylor':
+        #         curve_type = show_c.split('_')[1]
+        #         yfit = taylor(xfit , *s.fit_params.taylor, dt = s.dt * s.xscale) * s.yscale + s.P_noise
+        #     plot_semilog10(xfit - fD / s.xscale , yfit, ax = ax, c = color_dict[curve_type], label = label_dict[curve_type])
     
     if not recenter:
         ax.axvline(fDop_median / s.xscale, c = 'b', label = r'$f_{D}$ = %.3f kHz' %(fDop_median / s.xscale))
+    else:
+        ax.set_xlim(-1, 1)
     ax.grid(c = 'silver', ls = '--', lw = 0.5)
     ax.set_xlabel('f [kHz]', fontsize= 10)
     ax.set_ylabel('PSD [a.u.]', fontsize = 10)
@@ -151,10 +153,10 @@ if __name__ == '__main__':
     out = FW2DReader.compute_profile(subdir)
     
 #%%
-    i = 7  
+    i = 0  
     s = out.specobjs[i]
     
-    %matplotlib widget
+    # %matplotlib widget
     FW2DSpectraVisualize(s, recenter = False)
     
 

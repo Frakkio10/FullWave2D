@@ -1,0 +1,2 @@
+[console_scripts]
+FW2Dgui = FW2D.gui.FW2Dgui:main
