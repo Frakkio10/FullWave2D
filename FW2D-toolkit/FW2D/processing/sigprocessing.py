@@ -573,23 +573,13 @@ class OutputWrapper():
         header.Nbsim   = par.Nbsim
         
         return header
-
-
-    # def update_specobjs(self, specobjs):
-        
-    #     # clean up the specobjs:
-    #     specobjs = self._handle_attributes(specobjs)
-        
-    #     # fill the placeholder object with the data from specobjs:
-    #     for specobj in specobjs:     
-    #         if specobj is not None:      
-    #             self.merged_specobj.specobjs[specobj.header.isim-1] = specobj
-        
-    #     # insert/update the most relevant data at the top-level of the file
-    #     self._make_toplevel_data(self.merged_specobj)
     
     def update_specobjs(self, specobjs):
         specobjs = self._handle_attributes(specobjs)
+
+        # convert to list if it's a numpy array (happens when loaded from .mat file)
+        if not isinstance(self.merged_specobj.specobjs, list):
+            self.merged_specobj.specobjs = list(self.merged_specobj.specobjs)
 
         # expand the list if new simulations were added beyond the original Nbsim
         max_isim = max(s.header.isim for s in specobjs if hasattr(s, 'header'))
@@ -672,69 +662,65 @@ class OutputWrapper():
             return merged_specobj
         else:
             return None
-        
+    
+    
     def _make_toplevel_data(self, merged_specobj):
-        """Extract the most relevant data of the data contained in the merged_specobj
-        to put them at the top-level of the file.
-        """
-        
-        Nbsim = merged_specobj.header.Nbsim
-        par   = self.data_interface.params
-        
-        isims   = np.arange(1, Nbsim+1)
-        freqGHz = par.F[isims-1]
 
+        par     = self.data_interface.params
+        isims   = np.arange(1, par.Nbsim + 1)
+        freqGHz = par.F[isims - 1]
+
+        # use the actual number of specobjs slots, not the stale header.Nbsim
+        Nbsim = len(merged_specobj.specobjs)
 
         validated = np.zeros(Nbsim)
-        fDop      = np.nan * np.ones_like(validated)
+        fDop      = np.nan * np.ones(Nbsim)
         dfDop     = np.copy(fDop)
         fDop_max  = np.copy(fDop)
         fDop_min  = np.copy(fDop)
         theta     = par.theta
         waist     = par.waist
-        
+
+        # also update the header to reflect the new count
+        merged_specobj.header.Nbsim = Nbsim
+
         indices_treated = []
-        
-        from FW2D.io.utils import is_iterable 
+
+        from FW2D.io.utils import is_iterable
         if not is_iterable(merged_specobj.specobjs):
             merged_specobj.specobjs = [merged_specobj.specobjs]
 
-
         for i, specobj in enumerate(merged_specobj.specobjs):
-            
+
             if specobj is None:
                 continue
-            
-            # specobj = Struct(specobj)
-            if len(specobj) != 0: # meaning != NaNs (but somehow they are not recognized as such)
+
+            if len(specobj) != 0:
                 validated[i] = specobj.validated
-                
+
                 if validated[i] != 0.0:
-                    indices_treated.append(i+1)
-                
-                # to be filled:
+                    indices_treated.append(i + 1)
+
                 if hasattr(specobj, 'fDop'):
                     fDop[i] = specobj.fDop
                 if hasattr(specobj, 'fDop_max') and hasattr(specobj, 'fDop_min'):
-                    fDop_max[i] =  specobj.fDop_max 
-                    fDop_min[i] =  specobj.fDop_min 
-                    dfDop[i]    =  np.abs(fDop_max[i] - fDop_min[i])  # somewhat redundant now, as we have min and max stored, but we keep it for consistency with earlier versions
+                    fDop_max[i] = specobj.fDop_max
+                    fDop_min[i] = specobj.fDop_min
+                    dfDop[i]    = np.abs(fDop_max[i] - fDop_min[i])
                 else:
                     if hasattr(specobj, 'dfDop'):
                         dfDop[i] = specobj.dfDop
 
-                
-        
-        merged_specobj.freqGHz   = freqGHz
-        merged_specobj.theta     = theta
-        merged_specobj.waist     = waist
-        merged_specobj.fDop      = fDop 
+        # update freqGHz/theta/waist to match the new Nbsim if par was also extended
+        merged_specobj.freqGHz   = par.F[:Nbsim]
+        merged_specobj.theta     = par.theta[:Nbsim] if len(par.theta) >= Nbsim else par.theta
+        merged_specobj.waist     = par.waist[:Nbsim] if len(par.waist) >= Nbsim else par.waist
+        merged_specobj.fDop      = fDop
         merged_specobj.dfDop     = dfDop
-        merged_specobj.fDop_min  = fDop_min 
-        merged_specobj.fDop_max  = fDop_max 
+        merged_specobj.fDop_min  = fDop_min
+        merged_specobj.fDop_max  = fDop_max
         merged_specobj.validated = validated
-                
-        # update also header:
+
         merged_specobj.header.isims_treated = np.array(indices_treated)
 # %%
 if __name__ == '__main__':

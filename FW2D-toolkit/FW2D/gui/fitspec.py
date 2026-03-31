@@ -223,6 +223,8 @@ class FitSpec(QtWidgets.QWidget):
 
         # restore ANY previously saved specobj (not just validated/rejected ones)
         existing_specobjs = self.output_wrapper.merged_specobj.specobjs
+        if not isinstance(existing_specobjs, list):
+            existing_specobjs = list(existing_specobjs)
         isims_treated = self.output_wrapper.header.isims_treated
 
         for k, (isim, specobj) in enumerate(zip(isims, specobjs)):
