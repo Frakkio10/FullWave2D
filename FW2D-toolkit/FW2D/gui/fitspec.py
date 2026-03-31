@@ -33,7 +33,7 @@ class FitSpecWidgetNavigator(WidgetNavigator):
         
 
 class FitSpec(QtWidgets.QWidget):
-    def __init__(self, subdir, isims=[], sharex=True, sharey=True, use_mask=False, parent=None, verbose=False):
+    def __init__(self, subdir, machine = 'irene', isims=[], sharex=True, sharey=True, use_mask=False, parent=None, verbose=False):
         super().__init__(parent)
         
         if not verbose:
@@ -41,6 +41,7 @@ class FitSpec(QtWidgets.QWidget):
         
         self.subdir = subdir
         self.isims = isims
+        self.machine = machine
         self.workers = [] # Keep references to the workers
         self.use_mask = use_mask
         self.verbose = verbose
@@ -185,30 +186,61 @@ class FitSpec(QtWidgets.QWidget):
         self.curr_data_panel = self.data_panels[index]
 
         
+    # def _setup_spectra(self, isims, sharex=True, sharey=True):
+
+    #     self.data_interface = DataInterface(self.subdir, machine = self.machine)
+    #     isims = self.data_interface._get_sim_choice(isims)
+    #     self.isims = isims
+    #     self.output_wrapper = OutputWrapper(self.data_interface) # automatically loads the existing data from file if any
+           
+    #     # initialize the specobjs:
+    #     specobjs = init_specobjs(self.data_interface, isims=self.isims,machine = self.machine)
+        
+    #     # check if some of the specobjs already have been treated (validated or rejected), in which case they are overwritten:
+    #     isims_treated = self.output_wrapper.header.isims_treated
+    #     if len(isims_treated) > 0:
+    #         if self.verbose:
+    #             print(f'Found {len(self.output_wrapper.header.isims_treated)} specobjs already treated.')
+                
+    #         for i in isims_treated:
+    #             if i in isims:
+    #                 k = (np.where(i==isims))[0][0]
+    #                 specobjs[k] = self.output_wrapper.merged_specobj.specobjs[i-1]
+        
+    #     self.output_wrapper.update_specobjs(specobjs)
+        
+    #     self.specobjs = specobjs
+    
     def _setup_spectra(self, isims, sharex=True, sharey=True):
 
-        self.data_interface = DataInterface(self.subdir)
+        self.data_interface = DataInterface(self.subdir, machine=self.machine)
         isims = self.data_interface._get_sim_choice(isims)
         self.isims = isims
-        self.output_wrapper = OutputWrapper(self.data_interface) # automatically loads the existing data from file if any
-           
-        # initialize the specobjs:
-        specobjs = init_specobjs(self.data_interface, isims=self.isims,)
-        
-        # check if some of the specobjs already have been treated (validated or rejected), in which case they are overwritten:
+        self.output_wrapper = OutputWrapper(self.data_interface)
+
+        # initialize fresh specobjs for all requested isims
+        specobjs = init_specobjs(self.data_interface, isims=self.isims, machine=self.machine)
+
+        # restore ANY previously saved specobj (not just validated/rejected ones)
+        existing_specobjs = self.output_wrapper.merged_specobj.specobjs
         isims_treated = self.output_wrapper.header.isims_treated
-        if len(isims_treated) > 0:
-            if self.verbose:
-                print(f'Found {len(self.output_wrapper.header.isims_treated)} specobjs already treated.')
-                
-            for i in isims_treated:
-                if i in isims:
-                    k = (np.where(i==isims))[0][0]
-                    specobjs[k] = self.output_wrapper.merged_specobj.specobjs[i-1]
-        
+
+        for k, (isim, specobj) in enumerate(zip(isims, specobjs)):
+            # index into the saved list (1-based)
+            saved = existing_specobjs[isim - 1] if isim - 1 < len(existing_specobjs) else None
+
+            if saved is not None and len(saved) != 0:
+                if self.verbose:
+                    status = "treated" if isim in isims_treated else "previously computed"
+                    print(f'Restoring {status} specobj for isim={isim}')
+                specobjs[k] = saved
+            else:
+                if self.verbose:
+                    print(f'New isim={isim}, will run fresh fit.')
+
+        # update the wrapper so new isims are registered (expands the specobjs list if needed)
         self.output_wrapper.update_specobjs(specobjs)
-        
-        self.specobjs = specobjs
+        self.specobjs = specobjs    
 
 
     def _run_fits(self, specobjs=None):

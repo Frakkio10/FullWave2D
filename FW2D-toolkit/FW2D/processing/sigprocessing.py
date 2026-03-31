@@ -575,17 +575,31 @@ class OutputWrapper():
         return header
 
 
+    # def update_specobjs(self, specobjs):
+        
+    #     # clean up the specobjs:
+    #     specobjs = self._handle_attributes(specobjs)
+        
+    #     # fill the placeholder object with the data from specobjs:
+    #     for specobj in specobjs:     
+    #         if specobj is not None:      
+    #             self.merged_specobj.specobjs[specobj.header.isim-1] = specobj
+        
+    #     # insert/update the most relevant data at the top-level of the file
+    #     self._make_toplevel_data(self.merged_specobj)
+    
     def update_specobjs(self, specobjs):
-        
-        # clean up the specobjs:
         specobjs = self._handle_attributes(specobjs)
-        
-        # fill the placeholder object with the data from specobjs:
-        for specobj in specobjs:     
-            if specobj is not None:      
-                self.merged_specobj.specobjs[specobj.header.isim-1] = specobj
-        
-        # insert/update the most relevant data at the top-level of the file
+
+        # expand the list if new simulations were added beyond the original Nbsim
+        max_isim = max(s.header.isim for s in specobjs if hasattr(s, 'header'))
+        while len(self.merged_specobj.specobjs) < max_isim:
+            self.merged_specobj.specobjs.append({})
+
+        for specobj in specobjs:
+            if specobj is not None:
+                self.merged_specobj.specobjs[specobj.header.isim - 1] = specobj
+
         self._make_toplevel_data(self.merged_specobj)
     
     def export(self, outpath=None, verbose=False, use_existing_file=True):
@@ -689,7 +703,7 @@ class OutputWrapper():
         for i, specobj in enumerate(merged_specobj.specobjs):
             
             if specobj is None:
-                continues
+                continue
             
             # specobj = Struct(specobj)
             if len(specobj) != 0: # meaning != NaNs (but somehow they are not recognized as such)

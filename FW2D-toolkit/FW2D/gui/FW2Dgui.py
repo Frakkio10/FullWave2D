@@ -53,7 +53,7 @@ def main():
     subdir    = args.subdir 
     machine   = args.machine
     
-    assert machine in ['irene', 'marconi'], f'machine={machine} not supported. Must be "west", "tcv" or "aug".'
+    assert machine in ['irene', 'marconi', "altair"], f'machine={machine} not supported. Must be "irene", "marconi" or "altair".'
                 
     # optional
     modules   = args.modules
@@ -63,9 +63,8 @@ def main():
 
     from FW2D.gui import FitSpec
     kwargs = dict(verbose=verbose)
-
     modules_dict = {
-        'fit': (FitSpec, (subdir, isims), kwargs, 'Fit Spectra'),
+        'fit': (FitSpec, (subdir, machine, isims), kwargs, 'Fit Spectra'),
     }
 
 

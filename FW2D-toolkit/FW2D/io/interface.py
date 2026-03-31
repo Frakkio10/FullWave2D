@@ -25,7 +25,11 @@ class DataInterface(Struct):
         
     def get_FW_params(self,):
         
-        DATA_DIR = Path('/home/FO278650/Bureau/FullWave2D_FO/data/fw2d_irene')
+        if self.machine == "irene":
+            DATA_DIR = Path('/home/FO278650/Bureau/FullWave2D_FO/data/fw2d_irene')
+        else:
+            DATA_DIR = Path('/home/FO278650/Bureau/FullWave2D_FO/data/fw2d')
+            
         # DATA_DIR = Path(defs.FW2D_irene_DATA_DIR) if self.machine == 'irene' else Path(defs.FW2D_marconi_DATA_DIR) if self.machine == 'marconi' else Path(defs.FW2D_DATA_DIR)    
         pathdir = DATA_DIR.joinpath(self.subdir)
         
@@ -34,14 +38,20 @@ class DataInterface(Struct):
         F     = []
         theta = []
         waist = []
+        yante = []
+        xante = []
+        dx    = []
         mode  = []
         name  = []
         
         for simname in folders:
             inp = InputData.load_pickle(simname, subdir = self.subdir, machine = self.machine)
-            F.append(int(inp.f0 * 1e-9))
+            F.append(inp.f0 * 1e-9)
             theta.append(-inp.angle)
-            waist.append(int(inp.waist / inp.dx -  int((inp.TFSF / 2 - 4))))
+            waist.append(inp.waist) #m
+            yante.append(inp.yante) #m
+            xante.append(inp.xante * inp.dx) #m
+            dx.append(inp.dx)
             mode.append(inp.mode)
             name.append(inp.name)
         
@@ -49,6 +59,9 @@ class DataInterface(Struct):
         params.F     = np.array(F)
         params.theta = np.array(theta)
         params.waist = np.array(waist)
+        params.xante = np.array(xante)
+        params.yante = np.array(yante)
+        params.dx    = np.array(dx)
         params.mode  = np.array(mode)
         params.name  = np.array(name)
         params.Nbsim = params.F.size
