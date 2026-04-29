@@ -17,7 +17,10 @@ from FW2D.gui.helper_widgets import WidgetNavigator, ExcludeROIAxesWidget
 
 from FW2D.io.interface import DataInterface
 from matlabtools import Struct
-from FW2D.processing.sigprocessing import (init_specobjs, OutputWrapper, 
+# from FW2D.processing.sigprocessing_FWS import (init_specobjs, OutputWrapper, 
+#                                           perform_specobj_fits, get_fDop_from_fit_results,
+#                                           show_estimate_with_errorbars)
+from FW2D.processing.sigprocessing_HW import (init_specobjs, OutputWrapper, 
                                           perform_specobj_fits, get_fDop_from_fit_results,
                                           show_estimate_with_errorbars)
 class FitSpecWidgetNavigator(WidgetNavigator):
@@ -185,31 +188,6 @@ class FitSpec(QtWidgets.QWidget):
         self.curr_ax      = self.axs[index]
         self.curr_data_panel = self.data_panels[index]
 
-        
-    # def _setup_spectra(self, isims, sharex=True, sharey=True):
-
-    #     self.data_interface = DataInterface(self.subdir, machine = self.machine)
-    #     isims = self.data_interface._get_sim_choice(isims)
-    #     self.isims = isims
-    #     self.output_wrapper = OutputWrapper(self.data_interface) # automatically loads the existing data from file if any
-           
-    #     # initialize the specobjs:
-    #     specobjs = init_specobjs(self.data_interface, isims=self.isims,machine = self.machine)
-        
-    #     # check if some of the specobjs already have been treated (validated or rejected), in which case they are overwritten:
-    #     isims_treated = self.output_wrapper.header.isims_treated
-    #     if len(isims_treated) > 0:
-    #         if self.verbose:
-    #             print(f'Found {len(self.output_wrapper.header.isims_treated)} specobjs already treated.')
-                
-    #         for i in isims_treated:
-    #             if i in isims:
-    #                 k = (np.where(i==isims))[0][0]
-    #                 specobjs[k] = self.output_wrapper.merged_specobj.specobjs[i-1]
-        
-    #     self.output_wrapper.update_specobjs(specobjs)
-        
-    #     self.specobjs = specobjs
     
     def _setup_spectra(self, isims, sharex=True, sharey=True):
 
@@ -262,7 +240,7 @@ class FitSpec(QtWidgets.QWidget):
         # if not hasattr(self, 'specobjs'):
         #     self._setup_spectra()
         
-        from FW2D.processing.sigprocessing import make_title
+        from FW2D.processing.sigprocessing_FWS import make_title
         
         for i, (s, ax, ax_sig, data_panel) in enumerate(zip(self.specobjs, np.array(self.axs).flatten(), self.axs_signal, self.data_panels )):
 
@@ -333,11 +311,27 @@ class FitSpec(QtWidgets.QWidget):
         if not 'lw' in kwargs:
             kwargs['lw'] = 2
         
+        # if hasattr(ax, 'plot_dict'):
+        #     for item in ax.plot_dict.values():
+        #         ax.removeItem(item)
+        
         if hasattr(ax, 'plot_dict'):
             for item in ax.plot_dict.values():
+                if item is not None:
+                    try:
+                        ax.removeItem(item)
+                    except Exception:
+                        pass
+            ax.plot_dict = {}
+
+        # flush any remaining ghost items from the ViewBox:
+        try:
+            for item in list(ax.listDataItems()):
                 ax.removeItem(item)
-        
-        from FW2D.processing.sigprocessing import show_spec
+        except Exception:
+            pass
+
+        from FW2D.processing.sigprocessing_HW import show_spec
         ax.plot_dict = show_spec(specobj, ax=ax, **kwargs)
         
         
@@ -403,7 +397,8 @@ class FitSpec(QtWidgets.QWidget):
                     if curve_type=='cog': # ignore the cog for now
                         checkbox.setChecked(False)
                     else:
-                        checkbox.update(description=f'{curve_type} {_fDop :.1f}') # display in KHz
+                        # checkbox.update(description=f'{curve_type} {_fDop :.1f}') # display in KHz # ST
+                        checkbox.update(description=f'{curve_type} {_fDop / 1e6 :.1f}') # display in MHz (KHz) HW
                         checkbox.setChecked(checked_state[curve_type]) # by, default, check the box if the fit converged (meaning it will be used for the median), unless the user unchecked it before
                     
             
@@ -412,8 +407,8 @@ class FitSpec(QtWidgets.QWidget):
             fDop_results_selected = self._get_fDop_results_selected(specobj, data_panel, fit_params)
             
             if reset or not hasattr(specobj, 'fDop_max'):
-                specobj.fDop_max = fDop_results_selected['fDop_max']
-                specobj.fDop_min = fDop_results_selected['fDop_min']
+                specobj.fDop_max = fDop_results_selected['fDop_max'] 
+                specobj.fDop_min = fDop_results_selected['fDop_min'] 
             if reset or not hasattr(specobj, 'fDop'):
                 # update the final fDop and dfDop values:             
                 specobj.fDop = fDop_results_selected['fDop']
@@ -509,17 +504,33 @@ class FitSpec(QtWidgets.QWidget):
             # self._update_fit_validation(ax, s)
         
 
-    def _update_fDop_text_boxes(self, data_panel, specobj, fDop_results_selected):
+    # def _update_fDop_text_boxes(self, data_panel, specobj, fDop_results_selected):
         
 
-            e = Struct(fDop_results_selected) # automatic stimates
-            a = specobj # actual values (stored to file, can be modified manually)
+    #         e = Struct(fDop_results_selected) # automatic stimates
+    #         a = specobj # actual values (stored to file, can be modified manually)
             
-            data_panel.textbox_fDop.update(description=f'Estimate (median: {e.fDop:.1f})', value=f'{a.fDop:.1f}')
-            data_panel.textbox_dfDop.update(description=f'Error (max - min: {e.dfDop:.1f})', value=f'{a.dfDop:.1f}')
-            data_panel.textbox_fDop_max.update(description=f'max: {e.fDop_max:.2f}', value=f'{a.fDop_max:.2f}')
-            data_panel.textbox_fDop_min.update(description=f'min: {e.fDop_min:.2f}', value=f'{a.fDop_min:.2f}')
-            
+    #         data_panel.textbox_fDop.update(description=f'Estimate (median: {e.fDop / 1e6:.1f}) MHz', value=f'{a.fDop / 1e6 :.1f}')
+    #         data_panel.textbox_dfDop.update(description=f'Error (max - min: {e.dfDop / 1e6:.1f}) MHz', value=f'{a.dfDop / 1e6 :.1f}')
+    #         data_panel.textbox_fDop_max.update(description=f'max: {e.fDop_max / 1e6:.2f} MHz', value=f'{a.fDop_max / 1e6:.2f}')
+    #         data_panel.textbox_fDop_min.update(description=f'min: {e.fDop_min / 1e6:.2f} MHz', value=f'{a.fDop_min / 1e6:.2f}')
+    
+    def _update_fDop_text_boxes(self, data_panel, specobj, fDop_results_selected):
+    
+        # e = Struct(fDop_results_selected) # automatic stimates
+        # a = specobj # actual values (stored to file, can be modified manually)
+        
+        # data_panel.textbox_fDop.update(description=f'Estimate (median: {e.fDop:.1f})', value=f'{a.fDop:.1f}')
+        # data_panel.textbox_dfDop.update(description=f'Error (max - min: {e.dfDop:.1f})', value=f'{a.dfDop:.1f}')
+        # data_panel.textbox_fDop_max.update(description=f'max: {e.fDop_max:.2f}', value=f'{a.fDop_max:.2f}')
+        # data_panel.textbox_fDop_min.update(description=f'min: {e.fDop_min:.2f}', value=f'{a.fDop_min:.2f}')
+        e = Struct(fDop_results_selected)
+        a = specobj
+        scale = 1e6  # display in MHz
+        data_panel.textbox_fDop.update(description=f'Estimate (median: {e.fDop/scale:.2f} MHz)', value=f'{a.fDop/scale:.2f}')
+        data_panel.textbox_dfDop.update(description=f'Error (max-min: {e.dfDop/scale:.2f} MHz)', value=f'{a.dfDop/scale:.2f}')
+        data_panel.textbox_fDop_max.update(description=f'max: {e.fDop_max/scale:.2f} MHz', value=f'{a.fDop_max/scale:.2f}')
+        data_panel.textbox_fDop_min.update(description=f'min: {e.fDop_min/scale:.2f} MHz', value=f'{a.fDop_min/scale:.2f}')
             
     def _update_odd_even_label(self, data_panel, odd_even_ratio):
         data_panel.odd_even_ratio_label.setText(f'Odd/even ratio:{odd_even_ratio:.3f}')
@@ -559,7 +570,7 @@ class FitSpec(QtWidgets.QWidget):
         fDop_results_selected = get_fDop_from_fit_results(
             fit_params_selected, specobj.xscale)
         
-        return fDop_results_selected
+        return fDop_results_selected 
 
     def _update_fit_validation(self, ax, specobj):
         self._validate_fit(ax, specobj) if specobj.validated==1 else self._reject_fit(ax, specobj) if specobj.validated==-1 else self._reset_fit_validation(ax, specobj)
@@ -635,24 +646,38 @@ class FitSpec(QtWidgets.QWidget):
     
     def _on_textbox_returnPressed(self, specobj,data_panel, textbox, key):
         
+        # old_val = getattr(specobj, key)
+        # try:
+        #     new_val = float(eval(textbox.text())) #* 1e3
+        # except Exception as e:
+        #     if self.verbose:
+        #         print(f'skipping update of {key} due to error:\n{e}')
+        #     return
+        # setattr(specobj, key, new_val)
+        
+        # specobj.dfDop = specobj.fDop_max - specobj.fDop_min
+        
+        # fDop_results_selected = self._get_fDop_results_selected(specobj, data_panel, specobj.fit_params)
+        # self._update_fDop_text_boxes(data_panel, specobj, fDop_results_selected)
+        # # self._update_panel(specobj, data_panel, reset=False)
+        
+        # if self.verbose:
+        #     print(f'updating {key} from {old_val/1e7:.1f} to {new_val/1e7:.1f} MHz') 
+            
+        # self._update_estimate_with_errorbar(specobj, data_panel.ax)
         old_val = getattr(specobj, key)
         try:
-            new_val = float(eval(textbox.text())) #* 1e3
+            new_val = float(eval(textbox.text())) * 1e6  # user types MHz, store Hz
         except Exception as e:
             if self.verbose:
                 print(f'skipping update of {key} due to error:\n{e}')
             return
         setattr(specobj, key, new_val)
-        
         specobj.dfDop = specobj.fDop_max - specobj.fDop_min
-        
         fDop_results_selected = self._get_fDop_results_selected(specobj, data_panel, specobj.fit_params)
         self._update_fDop_text_boxes(data_panel, specobj, fDop_results_selected)
-        # self._update_panel(specobj, data_panel, reset=False)
-        
         if self.verbose:
-            print(f'updating {key} from {old_val/1e3:.1f} to {new_val/1e3:.1f} kHz') 
-            
+            print(f'updating {key} from {old_val/1e6:.2f} to {new_val/1e6:.2f} MHz')
         self._update_estimate_with_errorbar(specobj, data_panel.ax)
         
     
@@ -898,7 +923,7 @@ class WorkerSignal(QThread):
         
     def run(self):
         
-        from FW2D.processing.sigprocessing import get_normalized_complex_signal
+        from FW2D.processing.sigprocessing_FWS import get_normalized_complex_signal
         
         
         for (ax,isim) in zip(self.parent.axs_signal, self.parent.isims):
