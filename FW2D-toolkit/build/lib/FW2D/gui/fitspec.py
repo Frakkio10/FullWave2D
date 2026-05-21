@@ -17,7 +17,7 @@ from FW2D.gui.helper_widgets import WidgetNavigator, ExcludeROIAxesWidget
 
 from FW2D.io.interface import DataInterface
 from matlabtools import Struct
-from FW2D.processing.sigprocessing import (init_specobjs, OutputWrapper, 
+from FW2D.processing.sigprocessing_FWS import (init_specobjs, OutputWrapper, 
                                           perform_specobj_fits, get_fDop_from_fit_results,
                                           show_estimate_with_errorbars)
 class FitSpecWidgetNavigator(WidgetNavigator):
@@ -226,7 +226,7 @@ class FitSpec(QtWidgets.QWidget):
         # if not hasattr(self, 'specobjs'):
         #     self._setup_spectra()
         
-        from FW2D.processing.sigprocessing import make_title
+        from FW2D.processing.sigprocessing_FWS import make_title
         
         for i, (s, ax, ax_sig, data_panel) in enumerate(zip(self.specobjs, np.array(self.axs).flatten(), self.axs_signal, self.data_panels )):
 
@@ -300,7 +300,7 @@ class FitSpec(QtWidgets.QWidget):
             for item in ax.plot_dict.values():
                 ax.removeItem(item)
         
-        from FW2D.processing.sigprocessing import show_spec
+        from FW2D.processing.sigprocessing_FWS import show_spec
         ax.plot_dict = show_spec(specobj, ax=ax, **kwargs)
         
         
@@ -845,7 +845,7 @@ class WorkerSignal(QThread):
         
     def run(self):
         
-        from FW2D.processing.sigprocessing import get_normalized_complex_signal
+        from FW2D.processing.sigprocessing_FWS import get_normalized_complex_signal
         
         
         for (ax,isim) in zip(self.parent.axs_signal, self.parent.isims):
