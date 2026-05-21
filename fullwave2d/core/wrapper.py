@@ -103,10 +103,18 @@ class InputData (object):
         self.angle_gola = kwargs.get('angle_gola', None)
         self.dtheta     = kwargs.get('dtheta', 0)
         self.antenna    = kwargs.get('antenna', None) # 'difdop' or 'dreve'
-        self._antenna_setup()
+        self.antenna_type = kwargs.get('antenna_type', 'gaussian')  # 'gaussian' or 'horn'
+        self.horn_width   = kwargs.get('horn_width',  0.05)   # m
+        self.horn_length  = kwargs.get('horn_length', 0.5)    # m
+        self.antenna_setup()
 
         self.subdir     = kwargs.get('subdir', None)
         self.save_diag  =  kwargs.get('save_diag', True)
+        
+        # PCR receiver array
+        self.n_recv     = kwargs.get('n_recv', 0)
+        self.yrecv      = kwargs.get('yrecv', np.array([], dtype=np.int32))
+        self.recv_width = kwargs.get('recv_width', 0)
 
     def get_outp_dir(self, **kwargs):
         """
@@ -234,89 +242,66 @@ class InputData (object):
         inputs = [InputData.load_pickle(p) for p in paths]
         return visualize.display_results(inputs, **kwargs)
 
-    def _antenna_setup(self):
-        """
-        Create the initial Gaussian field amplitude and phase at the antenna position (No wavefront curvature).
-        """
-        lam = self.lam
-        w0 = self.waist
-        dx = self.dx
-        ny = self.ny
-        TFSF = self.TFSF
-
-        y_ant = self.yante - (TFSF)/2 * dx
-        # y_ant = self.yante
-        x,y = self.get_xy_coords(full_ext=True)
-
-        # alp = np.deg2rad(self.angle)
-        # dphase = - 2*pi * self.f0/c * dx * np.sin(alp)
-        # ampl = np.flip(np.exp( - (np.cos(alp) * (y - y_ant) / w0)**2), axis=0)
-        # phase = np.cumsum(np.ones_like(y) * dphase)
-        
-        # # Adjust phase to wrap around -PI to PI
-        # phase = (phase + np.pi) % (2 * np.pi) - np.pi
-
-        # self.ampl_inc = ampl
-        # self.phase_inc = phase
-        
-        alp = np.deg2rad(self.angle)
-        #dphase = - 2*pi * self.f0/c * dx * np.sin(alp)
-        #ampl = np.flip(np.exp( - (np.cos(alp) * (y - y_ant) / w0)**2), axis=0)
-        #phase = np.cumsum(np.ones_like(y) * dphase)
-        
-        aux = (np.cos(alp) * (y - y_ant) / (w0)) ** 2
-        ampl = np.exp(-aux)
-        ampl = np.flip(ampl, axis = 0)     
-        
-        dphase = - 2 * np.pi * self.f0 / c * dx * np.sin(alp)
-        phase = np.cumsum(np.ones_like(y) * dphase)
-        
-        #if (phase.any() < -np.pi):
-         #   phase += 2 * np.pi
-        phase = (phase + np.pi) % (2 * np.pi) - np.pi
-
-        # Adjust phase to wrap around -PI to PI
-        #phase = (phase + np.pi) % (2 * np.pi) - np.pi
-
-        self.ampl_inc = ampl
-        self.phase_inc = phase
-
     def antenna_setup(self):
         """
-        EXPERIMENTAL function (not used yet):
-        The idea is to setup amplitude and phase at the antenna position
-        taking into account the wavefront curvature accumulated during vacuum-
-        propagation.
+        Compute the incident field amplitude and phase at the antenna plane.
+        Dispatches to _gaussian_setup or _horn_setup depending on antenna_type.
         """
-        lam = self.lam
-        w0 = self.waist
-        dx = self.dx
-        ny = self.ny
+        if self.antenna_type == 'gaussian':
+            self._gaussian_setup()
+        elif self.antenna_type == 'horn':
+            self._horn_setup()
+        else:
+            raise ValueError(f"Unknown antenna_type '{self.antenna_type}'. Must be 'gaussian' or 'horn'.")
+
+    def _gaussian_setup(self):
+        """
+        Gaussian beam profile at the antenna plane.
+        Amplitude: Gaussian envelope centered at yante with waist w0.
+        Phase: linear ramp corresponding to tilt angle.
+        """
+        dx   = self.dx
         TFSF = self.TFSF
-        alp = self.angle # incidence angle [deg] (wrt separatrix normal)
+        alp  = np.deg2rad(self.angle)
 
-        a = 0.7 # minor radius [m]
-        R = 2.4 # major radius   [m]
-        rgola = 4.3 # radial distance antenna-plasma core  [m]
-        d_ant = rgola - R - 1.2 # radial distance antenna-separatrix [m]
+        y_ant = self.yante - (TFSF / 2) * dx
+        _, y  = self.get_xy_coords(full_ext=True)
 
-        self.yante = self.yante - (TFSF) * dx
-        y_ant = self.yante 
-        y = np.linspace(-(ny+TFSF)*dx/2, (ny+TFSF)*dx/2, ny+2*TFSF)
-        x = np.array([0])
-        X, Y = np.meshgrid(x,y)
+        ampl = np.exp(-(np.cos(alp) * (y - y_ant) / self.waist) ** 2)
+        ampl = np.flip(ampl, axis=0)
 
-        origin = [0, 0] # rotate about this point
-        Xr, Yr = rotate2D(X, Y, alp, origin)
+        dphase = -2 * np.pi * self.f0 / c * dx * np.sin(alp)
+        phase  = np.cumsum(np.ones_like(y) * dphase)
+        phase  = (phase + np.pi) % (2 * np.pi) - np.pi
 
-        gauss_beam = GaussianBeam(lam, w0)
-        ampl = gauss_beam.ampl(Xr - d_ant, Yr)
-        ampl[:TFSF] = 0.0
-        ampl[-TFSF:] = 0.0
-        phase = gauss_beam.phase(Xr - d_ant, Yr)
+        self.ampl_inc  = ampl
+        self.phase_inc = phase
 
-        self.ampl_inc = ampl.flatten() / np.max(ampl)
-        self.phase_inc = phase.flatten()
+    def _horn_setup(self):
+        """
+        Horn antenna profile at the antenna plane.
+        Amplitude: uniform (rect) within horn aperture, zero outside.
+        Phase: quadratic from horn geometry + linear tilt.
+        """
+        dx   = self.dx
+        TFSF = self.TFSF
+        alp  = np.deg2rad(self.angle)
+
+        y_ant = self.yante - (TFSF / 2) * dx
+        _, y  = self.get_xy_coords(full_ext=True)
+
+        # uniform amplitude within aperture
+        ampl = np.where(np.abs(y - y_ant) <= self.horn_width / 2, 1.0, 0.0)
+        ampl = np.flip(ampl, axis=0)
+
+        # quadratic phase from horn geometry + tilt
+        phase_horn = np.pi * (y - y_ant) ** 2 / (self.lam * self.horn_length)
+        phase_tilt = np.cumsum(np.ones_like(y) * (-2 * np.pi * self.f0 / c * dx * np.sin(alp)))
+        phase = (phase_horn + phase_tilt + np.pi) % (2 * np.pi) - np.pi
+
+        self.ampl_inc  = ampl
+        self.phase_inc = phase
+
 
     def get_tracing_data(self, antenna='difdop'):
         # """ Convenience function for calling tracingdat.get_tracing_data()."""
@@ -380,6 +365,9 @@ class OutputData (object):
         - outp.ez_inc: reference field (without plasma i.e. free propagation)
         - outp.doppler_data: Amplitude and phase evolution (as a result of
                             parallelized simulation sequence)
+        - outp.recv_IQ: IQ time series per receiver (PCR mode only),
+                shape (n_timesteps, n_recv * 2) with columns
+                [I_r0, Q_r0, I_r1, Q_r1, ...]
     """
     def __init__(self, name, subdir=None, compress_factor=1, **kwargs):
 
@@ -401,6 +389,10 @@ class OutputData (object):
         # if it exsists, load the Doppler antenna data:
         if Path(self.outp_dir / 'ampl_phase.npy').exists():
             self.doppler_data = np.load(self.outp_dir / 'ampl_phase.npy')
+            
+        # if it exists, load the PCR receiver data:
+        if Path(self.outp_dir / 'recv_IQ.npy').exists():
+            self.recv_IQ = np.load(self.outp_dir / 'recv_IQ.npy')
 
     def save_to_pickle(self, path, mkdir=False):
         """ Save this class instance to a binary .pkl file """
@@ -564,6 +556,12 @@ maxw.argtypes = [
                     POINTER(ctypes.c_double),
                     doublepp,
                     doublepp,
+                    
+                    ctypes.c_int,                    # n_recv
+                    np.ctypeslib.ndpointer(dtype=np.int32, flags='C_CONTIGUOUS'),  # yrecv
+                    ctypes.c_int,                    # recv_width
+                    POINTER(ctypes.c_double),        # ampl_recv
+                    POINTER(ctypes.c_double),        # fase_recv
 
                     ctypes.c_bool,
                     ctypes.c_char_p
@@ -627,13 +625,17 @@ def fw2d_wrapper(inp, make_outp_dir=True):
     nepp = to_double_pointer(ne)
 
     if inp.mode == 'O':
-        b0 = np.zeros((inp.ny, inp.nx))
+        inp.b0 = np.zeros((inp.ny, inp.nx))
     else:
         if inp.b0 is None:
             print('Warning: X-mode but no magnetic field provided. Assuming B=0.')
             b0 = np.zeros((inp.ny, inp.nx))
         else:
             b0 = inp.b0
+
+    b0 = np.flip(inp.b0, axis=0)
+    b0 = np.flip(b0, axis=1)
+    b0 = np.ascontiguousarray(b0, dtype=np.double)
 
     b0pp = to_double_pointer(b0)
 
@@ -643,7 +645,15 @@ def fw2d_wrapper(inp, make_outp_dir=True):
 
     ampl_incpp = to_double_pointer(inp.ampl_inc)
     phase_incpp = to_double_pointer(inp.phase_inc)
-
+    
+    # PCR receiver array
+    n_recv = ctypes.c_int(inp.n_recv)
+    yrecv = np.ascontiguousarray(inp.yrecv if inp.n_recv > 0 else np.array([0], dtype=np.int32),
+    dtype=np.int32)    
+    recv_width = ctypes.c_int(inp.recv_width)
+    ampl_recv  = (ctypes.c_double * inp.n_recv)(*([0.0] * max(inp.n_recv, 1)))
+    fase_recv  = (ctypes.c_double * inp.n_recv)(*([0.0] * max(inp.n_recv, 1)))
+    
     maxw(
          ctypes.c_double(inp.f0),
          ctypes.c_int(inp.nt),
@@ -664,16 +674,29 @@ def fw2d_wrapper(inp, make_outp_dir=True):
 
          ampl_incpp,
          phase_incpp,
+         
+         n_recv,
+         yrecv,
+         recv_width,
+         ampl_recv,
+         fase_recv,
+
          ctypes.c_bool(inp.save_diag),
          ctypes.c_char_p(str(outp_dir).encode('utf-8'))
         )
+    
 
     # automatically convert the .dat files into .npy files for efficiency
     fn_field     = Path(outp_dir) / 'ez_t.dat'
     fn_field_inc = Path(outp_dir) / 'ez_t_inc.dat'
     # fn_field_anim= Path(outp_dir) / 'ez_anim.dat'
     fn_antenna   = Path(outp_dir) / 'ant_signal_t.dat'
-
+    
+    # convert recv_IQ.dat to npy if it exists
+    fn_recv = Path(outp_dir) / 'recv_IQ.dat'
+    if fn_recv.exists():
+        OutputData.txt_to_npy(fn_recv, override=True)
+        
     for fn in [fn_field, fn_field_inc]:
         Nx = (inp.nx+2*inp.TFSF)
         Ny = (inp.ny+2*inp.TFSF)

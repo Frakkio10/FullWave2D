@@ -16,6 +16,11 @@ int main(double f0,
          double *phase,
          double **ampl_inc,
          double **phase_inc,
+         int n_recv,
+         int *yrecv,
+         int recv_width,
+         double *ampl_recv,
+         double *fase_recv,
          _Bool save_diag,
          char * outp_dir
        ){
@@ -39,6 +44,13 @@ int main(double f0,
 
   data.ampl_inc = ampl_inc;
   data.phase_inc = phase_inc;
+
+  /* PCR receiver array */
+  data.n_recv    = n_recv;
+  data.yrecv     = yrecv;
+  data.recv_width = recv_width;
+  data.ampl_recv = ampl_recv;
+  data.fase_recv = fase_recv;
 
   data.save_diag = save_diag;
   data.outp_dir = outp_dir;

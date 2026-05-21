@@ -98,6 +98,7 @@ int maxwell_2d_omode (struct inputdata *data) {
   int i, j, n;
 
   FILE *f, *f2, *f_inc, *f_anim;
+  FILE *f_recv = NULL;
 
   int nt, nx, ny;
 
@@ -110,6 +111,9 @@ int maxwell_2d_omode (struct inputdata *data) {
   double reflmax  = data->reflmax;
   int TFSF        = data->TFSF;
   int xante        = data->xante;
+  int n_recv       = data->n_recv;
+  int *yrecv       = data->yrecv;
+  int recv_width   = data->recv_width;
 
   nx = (data->nx) - 1 + 2*TFSF; /* Numero de celdas eje X */
   ny = (data->ny) - 1 + 2*TFSF; /* Numero de celdas eje Y */
@@ -215,6 +219,11 @@ int maxwell_2d_omode (struct inputdata *data) {
 		char fname_anim[200];
 		sprintf(fname_anim, "%s/ez_anim.dat", data->outp_dir);
 		f_anim = fopen(fname_anim, "w");
+    if (n_recv > 0) {
+      char fname_recv[200];
+      sprintf(fname_recv, "%s/recv_IQ.dat", data->outp_dir);
+      f_recv = fopen(fname_recv, "w");
+    }
   }
 
   /* ------------------------------------------------------------ */
@@ -380,6 +389,32 @@ int maxwell_2d_omode (struct inputdata *data) {
 				// }
       }
     }
+    /* PCR: per-receiver IQ collection */
+    if ((n % 2) == 0 && n_recv > 0) {
+        int r;
+        for (r = 0; r < n_recv; r++) {
+            double I_r = 0.0, Q_r = 0.0;
+            int jmin = yrecv[r] - recv_width;
+            int jmax = yrecv[r] + recv_width;
+            if (jmin < npml + 1)       jmin = npml + 1;
+            if (jmax > ny - npml - 1)  jmax = ny - npml - 1;
+            for (j = jmin; j <= jmax; j++) {
+                I_r += ampl_emi[j][0]*ampl_rec[j][0]
+                      *cos(-phase_rec[j][0] - data->phase_inc[j][0]);
+                Q_r += ampl_emi[j][0]*ampl_rec[j][0]
+                      *sin(-phase_rec[j][0] - data->phase_inc[j][0]);
+            }
+            I_r /= (jmax - jmin + 1);
+            Q_r /= (jmax - jmin + 1);
+            data->ampl_recv[r] = sqrt(I_r*I_r + Q_r*Q_r);
+            data->fase_recv[r] = atan2(Q_r, I_r);
+        }
+        if (data->save_diag && (n % 10) == 0) {
+            for (r = 0; r < n_recv; r++)
+                fprintf(f_recv, "%e %e ", data->ampl_recv[r], data->fase_recv[r]);
+            fprintf(f_recv, "\n");
+        }
+    }
 
     wt += wdt;
     if (wt > PI)
@@ -425,6 +460,7 @@ int maxwell_2d_omode (struct inputdata *data) {
     fclose(f2);
     fclose(f_inc);
     fclose(f_anim);
+    if (f_recv) fclose(f_recv);
   }
 
   memory_free (ez, ny + 1);

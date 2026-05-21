@@ -49,6 +49,13 @@ struct inputdata
   double **ampl_inc;
   double **phase_inc;
 
+  /* PCR receiver array */
+  int     n_recv;       /* number of receivers (0 = DBS mode) */
+  int    *yrecv;        /* poloidal index of each receiver [n_recv] */
+  int     recv_width;   /* half-width of collection region (grid points) */
+  double *ampl_recv;    /* output amplitude per receiver [n_recv] */
+  double *fase_recv;    /* output phase per receiver [n_recv] */
+
   _Bool save_diag;
   char *outp_dir;
 };

@@ -27,7 +27,7 @@ save_diag = True if is_root else False
 
 # %%
 
-filename = HD5_DIR.joinpath('final_test/advection_ITG.h5')
+filename = HD5_DIR.joinpath('kolmogorov_advection.h5')
 with h5.File(filename, "r") as f:
     Nt, Ny, Nx = f["fields/n"].shape
     n_0xky   = f['fields/n'][0,:].astype(np.complex128)
