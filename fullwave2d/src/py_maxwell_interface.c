@@ -16,6 +16,7 @@ int main(double f0,
          double *phase,
          double **ampl_inc,
          double **phase_inc,
+         double **phase_ref,
          int n_recv,
          int *yrecv,
          int recv_width,
@@ -44,6 +45,7 @@ int main(double f0,
 
   data.ampl_inc = ampl_inc;
   data.phase_inc = phase_inc;
+  data.phase_ref = phase_ref;
 
   /* PCR receiver array */
   data.n_recv    = n_recv;

@@ -400,9 +400,9 @@ int maxwell_2d_omode (struct inputdata *data) {
             if (jmax > ny - npml - 1)  jmax = ny - npml - 1;
             for (j = jmin; j <= jmax; j++) {
                 I_r += ampl_emi[j][0]*ampl_rec[j][0]
-                      *cos(-phase_rec[j][0] - data->phase_inc[j][0]);
+                       *cos(-phase_rec[j][0] - data->phase_ref[j][0]);
                 Q_r += ampl_emi[j][0]*ampl_rec[j][0]
-                      *sin(-phase_rec[j][0] - data->phase_inc[j][0]);
+                       *sin(-phase_rec[j][0] - data->phase_ref[j][0]);
             }
             I_r /= (jmax - jmin + 1);
             Q_r /= (jmax - jmin + 1);

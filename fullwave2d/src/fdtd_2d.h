@@ -48,7 +48,8 @@ struct inputdata
   double *fase_ant; /* Fase en la antena */
   double **ampl_inc;
   double **phase_inc;
-
+  double **phase_ref;   /* tilt-only phase reference for PCR demodulation */
+  
   /* PCR receiver array */
   int     n_recv;       /* number of receivers (0 = DBS mode) */
   int    *yrecv;        /* poloidal index of each receiver [n_recv] */

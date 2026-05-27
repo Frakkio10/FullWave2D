@@ -115,6 +115,17 @@ print('y_center_grid:', y_center_grid)
 #%%
 if not size == 1:
     pass  # MPI to be added later
+    # t0 = time.time()
+    # outp_gathered = scatterv_maxwell_from_h5(inp, ne_lin, filename, 
+    #                                           t_start=0, t_end=None, 
+    #                                           root=0, fluct_lvl=0.05,
+    #                                           simulations_per_CPU=simulations_per_CPU)
+    # if rank == root:
+    #     print(outp_gathered.shape)
+    #     # columns: [amp_dbs, phase_dbs, ampl_r0, phase_r0, ...]
+    #     np.save(inp.get_outp_dir() / 'ampl_phase_pcr.npy', outp_gathered)
+    #     print('time (s): ', time.time() - t0)
+
 else:
     t0 = time.time()
     inp.ne = ne_lin.T.astype(np.double)

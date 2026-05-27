@@ -273,7 +273,7 @@ class InputData (object):
         dphase = -2 * np.pi * self.f0 / c * dx * np.sin(alp)
         phase  = np.cumsum(np.ones_like(y) * dphase)
         phase  = (phase + np.pi) % (2 * np.pi) - np.pi
-
+        
         self.ampl_inc  = ampl
         self.phase_inc = phase
         self.phase_ref = phase  # for gaussian, reference = phase_inc
@@ -550,32 +550,33 @@ maxw = maxw_lib.main
 maxw.restype = None
 # declare argument types expected by the C function:
 maxw.argtypes = [
-                    ctypes.c_double,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_int,
-                    ctypes.c_double,
-                    ctypes.c_int,       # npml
-                    ctypes.c_double,    # reflmax
-                    ctypes.c_int,       # TFSF
-                    ctypes.c_int,       # xante
+                    ctypes.c_double,                 # f0
+                    ctypes.c_int,                    # nt
+                    ctypes.c_int,                    # nx
+                    ctypes.c_int,                    # ny
+                    ctypes.c_double,                 # dx
+                    ctypes.c_int,                    # npml
+                    ctypes.c_double,                 # reflmax
+                    ctypes.c_int,                    # TFSF
+                    ctypes.c_int,                    # xante
 
-                    ctypes.c_char,
-                    doublepp,           # ne
-                    doublepp,           # b0
-                    POINTER(ctypes.c_double),
-                    POINTER(ctypes.c_double),
-                    doublepp,
-                    doublepp,
-                    
+                    ctypes.c_char,                   # mode
+                    doublepp,                        # ne
+                    doublepp,                        # b0
+                    POINTER(ctypes.c_double),        # ampl_ant
+                    POINTER(ctypes.c_double),        # fase_ant
+                    doublepp,                        # ampl_inc
+                    doublepp,                        # phase_inc
+                    doublepp,                        # phase_ref
+
                     ctypes.c_int,                    # n_recv
                     np.ctypeslib.ndpointer(dtype=np.int32, flags='C_CONTIGUOUS'),  # yrecv
                     ctypes.c_int,                    # recv_width
                     POINTER(ctypes.c_double),        # ampl_recv
                     POINTER(ctypes.c_double),        # fase_recv
 
-                    ctypes.c_bool,
-                    ctypes.c_char_p
+                    ctypes.c_bool,                   # save_diag
+                    ctypes.c_char_p                  # outp_dir
                 ]
 
 def to_double_pointer(arr):
@@ -659,6 +660,9 @@ def fw2d_wrapper(inp, make_outp_dir=True):
 
     ampl_incpp  = to_double_pointer(ampl_inc)
     phase_incpp = to_double_pointer(phase_inc)
+    phase_ref = getattr(inp, 'phase_ref', inp.phase_inc)
+    phase_ref = phase_ref.reshape(-1, 1) if phase_ref.ndim == 1 else phase_ref
+    phase_refpp = to_double_pointer(phase_ref)  
     # PCR receiver array — getattr for backward compatibility with old DBS inputs
     n_recv_val     = getattr(inp, 'n_recv', 0)
     yrecv_val      = getattr(inp, 'yrecv', np.array([], dtype=np.int32))
@@ -697,6 +701,7 @@ def fw2d_wrapper(inp, make_outp_dir=True):
 
          ampl_incpp,
          phase_incpp,
+         phase_refpp,
          
          n_recv,
          yrecv,
