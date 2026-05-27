@@ -221,7 +221,7 @@ int maxwell_2d_omode (struct inputdata *data) {
 		f_anim = fopen(fname_anim, "w");
     if (n_recv > 0) {
       char fname_recv[200];
-      sprintf(fname_recv, "%s/recv_IQ.dat", data->outp_dir);
+      sprintf(fname_recv, "%s/recv_ampl_phase.dat", data->outp_dir);
       f_recv = fopen(fname_recv, "w");
     }
   }

@@ -8,6 +8,7 @@ import h5py as h5
 #from fullwave2d.core.wrapper import fw2d_wrapper, InputData, OutputData
 from fullwave2d.core.wrapper import fw2d_wrapper, InputData, OutputData
 import copy 
+from pathlib import Path
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
@@ -246,96 +247,96 @@ def scatter_maxwell_circular(ne_bkg, delta_ne, dny, n_slices, input_data, get_pr
         return outp_gathered
 
 
-def scatterv_maxwell_HW(HW_inp, input_data, t_start=0, t_end=None, root=0, **kwargs):
-    """
-    Distributes time indices across MPI ranks.
-    Each rank generates its own density maps using input_HW
-    and runs fw2d_wrapper on them.
+# def scatterv_maxwell_HW(HW_inp, input_data, t_start=0, t_end=None, root=0, **kwargs):
+#     """
+#     Distributes time indices across MPI ranks.
+#     Each rank generates its own density maps using input_HW
+#     and runs fw2d_wrapper on them.
 
-    Args:
-        HW_inp     : class for the creating the HW turbulence map from h5py file
-        input_data : Input object for Maxwell solver (wrapper.InputData)
-        t_start    : First time index (inclusive)
-        t_end      : Last time index (exclusive). If None, run until available end
-        root       : Master process
+#     Args:
+#         HW_inp     : class for the creating the HW turbulence map from h5py file
+#         input_data : Input object for Maxwell solver (wrapper.InputData)
+#         t_start    : First time index (inclusive)
+#         t_end      : Last time index (exclusive). If None, run until available end
+#         root       : Master process
         
-    kwargs:
-        fluct_lvl  : fluctuation level for the turbulence map, if not given 1 is taken
+#     kwargs:
+#         fluct_lvl  : fluctuation level for the turbulence map, if not given 1 is taken
 
-    Returns:
-        outp_gathered : (Nt_selected, 2) array with amplitude/phase results
-    """
+#     Returns:
+#         outp_gathered : (Nt_selected, 2) array with amplitude/phase results
+#     """
     
-    fluct_lvl = kwargs.pop('fluct_lvl', 1)
+#     fluct_lvl = kwargs.pop('fluct_lvl', 1)
     
-    print('fluctuation level', fluct_lvl)
+#     print('fluctuation level', fluct_lvl)
     
-    if rank == root:
-        print(f"Processor {rank}/{size} starting time-distributed MPI run.")
+#     if rank == root:
+#         print(f"Processor {rank}/{size} starting time-distributed MPI run.")
 
-        # Total number of time steps requested
-        Nt     = HW_inp.time.size  
-        Ny, Nx = HW_inp.n.shape
+#         # Total number of time steps requested
+#         Nt     = HW_inp.time.size  
+#         Ny, Nx = HW_inp.n.shape
 
-        if t_end is None:
-            t_end = Nt
-        Nt_sel = t_end - t_start
-        if Nt_sel <= 0:
-            raise ValueError("Invalid time range: check t_start and t_end")
+#         if t_end is None:
+#             t_end = Nt
+#         Nt_sel = t_end - t_start
+#         if Nt_sel <= 0:
+#             raise ValueError("Invalid time range: check t_start and t_end")
 
-        print(f"Processing time indices [{t_start}:{t_end}] → {Nt_sel} timesteps")
+#         print(f"Processing time indices [{t_start}:{t_end}] → {Nt_sel} timesteps")
 
-        # Distribute timesteps among ranks
-        n_pproc = np.zeros(size, dtype=int)
-        n_left = Nt_sel
-        for i in range(size):
-            n_pproc[i] = ceil(n_left / (size - i))
-            n_left -= n_pproc[i]
-    else:
-        Nt_sel = None
-        n_pproc = None
+#         # Distribute timesteps among ranks
+#         n_pproc = np.zeros(size, dtype=int)
+#         n_left = Nt_sel
+#         for i in range(size):
+#             n_pproc[i] = ceil(n_left / (size - i))
+#             n_left -= n_pproc[i]
+#     else:
+#         Nt_sel = None
+#         n_pproc = None
 
-    # Broadcast counts
-    Nt_sel = comm.bcast(Nt_sel, root=root)
-    n_pproc = comm.bcast(n_pproc, root=root)
+#     # Broadcast counts
+#     Nt_sel = comm.bcast(Nt_sel, root=root)
+#     n_pproc = comm.bcast(n_pproc, root=root)
 
-    # Each rank determines its local time indices
-    start_idx = t_start + np.sum(n_pproc[:rank])
-    end_idx   = start_idx + n_pproc[rank]
-    local_times = range(start_idx, end_idx)
+#     # Each rank determines its local time indices
+#     start_idx = t_start + np.sum(n_pproc[:rank])
+#     end_idx   = start_idx + n_pproc[rank]
+#     local_times = range(start_idx, end_idx)
 
-    if rank == root:
-        print("Time indices per rank:", n_pproc)
+#     if rank == root:
+#         print("Time indices per rank:", n_pproc)
 
-    # Local results
-    outp_local = np.zeros(len(local_times) * 2)
+#     # Local results
+#     outp_local = np.zeros(len(local_times) * 2)
 
-    for i, t in enumerate(local_times):
-        x, y, ne_map = HW_inp.prepare_ne_map(HW_inp.n, t, fluct_lvl, **kwargs) #function to generate the density map
+#     for i, t in enumerate(local_times):
+#         x, y, ne_map = HW_inp.prepare_ne_map(HW_inp.n, t, fluct_lvl, **kwargs) #function to generate the density map
 
-        # Example: add fluctuations if desired
-        input_data.ne = ne_map
-        print('inside the loop', i , t)
-        # Run the simulation
-        outp_local[2*i], outp_local[2*i+1] = fw2d_wrapper(input_data, rank == root)
+#         # Example: add fluctuations if desired
+#         input_data.ne = ne_map
+#         print('inside the loop', i , t)
+#         # Run the simulation
+#         outp_local[2*i], outp_local[2*i+1] = fw2d_wrapper(input_data, rank == root)
 
-        if rank == root:
-            print(f"Root finished timestep {t}")
+#         if rank == root:
+#             print(f"Root finished timestep {t}")
 
-    # Gather results
-    if rank == root:
-        outp_gathered = np.zeros(Nt_sel * 2)
-    else:
-        outp_gathered = None
+#     # Gather results
+#     if rank == root:
+#         outp_gathered = np.zeros(Nt_sel * 2)
+#     else:
+#         outp_gathered = None
 
-    outp_sendc = 2 * n_pproc
-    outp_displ = np.cumsum(outp_sendc) - outp_sendc
+#     outp_sendc = 2 * n_pproc
+#     outp_displ = np.cumsum(outp_sendc) - outp_sendc
 
-    comm.Gatherv(outp_local, [outp_gathered, outp_sendc, outp_displ, MPI.DOUBLE], root=root)
+#     comm.Gatherv(outp_local, [outp_gathered, outp_sendc, outp_displ, MPI.DOUBLE], root=root)
 
-    if rank == root:
+#     if rank == root:
         
-        return outp_gathered.reshape(Nt_sel, 2)
+#         return outp_gathered.reshape(Nt_sel, 2)
     
 
 def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
@@ -355,7 +356,9 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         fluct_lvl   : multiplicative factor for delta_ne
 
     Returns:
-        On root: (Nt_sel, 2) array [amplitude, phase]
+        On root: (Nt_sel, 2 + 2*n_recv) array
+                 columns: [amp_dbs, phase_dbs, ampl_r0, phase_r0, ...]
+                 For DBS (n_recv=0): (Nt_sel, 2) backward compatible
         On others: None
     """
 
@@ -415,8 +418,10 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         print(f"Distributed {Nt_sel} time steps among {size} ranks → {n_pproc} per rank")
 
     # Prepare local results
-    outp_local = np.zeros(len(local_times) * 2, dtype=float)
-
+    n_recv = getattr(input_data, 'n_recv', 0)
+    n_out  = 2 + 2 * n_recv  # [amp_dbs, phase_dbs, ampl_r0, phase_r0, ...]
+    outp_local = np.zeros(len(local_times) * n_out, dtype=float)
+    
     # # Each rank processes its local timesteps
 
     for i, t in enumerate(local_times):
@@ -436,55 +441,46 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         local_inp.ne = ne_tot.T.astype(np.double)
         # amp, phase = fw2d_wrapper(local_inp, rank == root)
         amp, phase = fw2d_wrapper(local_inp)
+        outp_local[n_out*i]   = amp
+        outp_local[n_out*i+1] = phase
 
-        # amp, phase = fw2d_wrapper(input_data, rank == root)
-        outp_local[2*i] = amp
-        outp_local[2*i+1] = phase
+        if n_recv > 0:
+            recv_path = local_inp.get_outp_dir() / 'recv_ampl_phase.npy'
+            if recv_path.exists():
+                recv_data  = np.load(recv_path)
+                ampl_recv  = recv_data[-1, 0::2]  # (n_recv,)
+                phase_recv = recv_data[-1, 1::2]  # (n_recv,)
+                for r in range(n_recv):
+                    outp_local[n_out*i + 2 + 2*r]     = ampl_recv[r]
+                    outp_local[n_out*i + 2 + 2*r + 1] = phase_recv[r]
 
         print(f"[Rank {rank}] Finished timestep {t}")
-    # Ensure chunks is always a list of arrays
-    # if simulations_per_CPU == 1:
-    #     chunks = [np.arange(Nt_sel)]  # single chunk with all timesteps
-    # else:
-    #     local_times = np.arange(t_start, t_end)  # timesteps for this rank
-    #     chunks = np.array_split(local_times, simulations_per_CPU)
-
-    # for j, chunk in enumerate(chunks):
-    #     for i, t in enumerate(chunk):
-    #         # Compute the global index
-    #         global_idx = 2 * (j * len(chunk) + i)
-    #         print(f"Chunk {j}, Local timestep {t}, Global timestep {global_idx}")
-
-    #         delta_ne_t = delta_ne[t, :, :]
-    #         ne_tot = ne_lin * (1 + fluct_lvl * delta_ne_t)
-    #         input_data.ne = ne_tot.astype(np.double)
-    #         outp_local[2*i], outp_local[2*i+1] = fw2d_wrapper(input_data, rank == root)
 
     # Gather to root
-    outp_sendc = 2 * n_pproc
+    outp_sendc = n_out * n_pproc
     outp_displ = np.cumsum(outp_sendc) - outp_sendc
 
     if rank == root:
-        outp_gathered = np.zeros(Nt_sel * 2, dtype=float)
+        outp_gathered = np.zeros(Nt_sel * n_out, dtype=float)
     else:
         outp_gathered = None
 
     comm.Gatherv(outp_local, [outp_gathered, outp_sendc, outp_displ, MPI.DOUBLE], root=root)
 
     if rank == root:
-        return outp_gathered.reshape(Nt_sel, 2)
+        return outp_gathered.reshape(Nt_sel, n_out)
+        # columns: [amp_dbs, phase_dbs, ampl_r0, phase_r0, ampl_r1, phase_r1, ...]
     return None
 
 
-def _scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
-                              t_start=0, t_end=None, root=0, *,
-                              fluct_lvl=0.05, simulations_per_CPU=1):
+def scatterv_maxwell_HW(input_data, ne_lin, h5_filename,
+                             t_start=0, t_end=None, root=0, *, fluct_lvl=0.05, simulations_per_CPU = 1, t_step = 1):
     """
     MPI-distributed execution of fw2d_wrapper over time steps in an HDF5 file.
-    Each rank handles several timesteps sequentially. Multiple simulations
-    per CPU are treated as consecutive timesteps.
+    Each rank handles several timesteps sequentially.
 
     Args:
+        inp_dict    : dictionary of parameters (e.g., may contain 'nproc')
         input_data  : object used by fw2d_wrapper, must have attribute .ne
         ne_lin      : 2D background density map
         h5_filename : HDF5 file containing dataset 'fields/n' of shape (Nt, Ny, Nx)
@@ -492,81 +488,106 @@ def _scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         t_end       : last time index (exclusive). If None → full available range
         root        : master rank
         fluct_lvl   : multiplicative factor for delta_ne
-        simulations_per_CPU : number of sub-timesteps per CPU
 
     Returns:
         On root: (Nt_sel, 2) array [amplitude, phase]
         On others: None
     """
-    from mpi4py import MPI
-    import numpy as np
-    import h5py as h5
-    from math import ceil
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
 
     # Root inspects the file and decides how to split timesteps
     if rank == root:
-        with h5.File(h5_filename, "r") as f:
-            Nt, Ny, Nx = f["fields/n"].shape
-
+        
+        #reading h5 file 
+        # with h5.File(h5_filename, "r", libver='latest', swmr=True) as f:
+        #     Nt = f['fields/density/nk'][()].shape[0] 
+            
+        # print(Nt)
+        Nt = 600
         Ny_lin, Nx_lin = ne_lin.shape
-        if (Ny_lin, Nx_lin) != (Ny, Nx):
-            raise ValueError("Shape mismatch between ne_lin and HDF5 dataset")
+        # if (Ny_lin, Nx_lin) != (Ny, Nx):
+            # raise ValueError("Shape mismatch between ne_lin and HDF5 dataset")
 
+        # Determine range
+        # if t_end is None:
+        #     # Default: each processor handles one timestep if possible
+        #     t_end = min(t_start + size, Nt)
         if t_end is None:
-            t_end = Nt
+            # Allow multiple simulations per CPU
+            max_timesteps = size * simulations_per_CPU * t_step
+            t_end = min(t_start + max_timesteps, Nt)
         if not (0 <= t_start < t_end <= Nt):
             raise ValueError(f"Invalid time range {t_start}:{t_end} for Nt={Nt}")
+        # Nt_sel = t_end - t_start
 
-        Nt_sel = t_end - t_start
+        # # Compute balanced load: number of time steps per rank
+        # n_pproc = np.zeros(size, dtype=int)
+        # n_left = Nt_sel
+        # for i in range(size):
+        #     n_pproc[i] = ceil(n_left / (size - i))
+        #     n_left -= n_pproc[i]
+        time_indices = np.arange(t_start, t_end, t_step)
+        Nt_sel = len(time_indices)
 
-        # Determine timesteps per rank
+        if Nt_sel == 0:
+            raise ValueError("No timesteps selected")
+        # Explicitly assign simulations_per_CPU tasks per rank
         n_pproc = np.zeros(size, dtype=int)
-        n_left = Nt_sel
         for i in range(size):
-            n_pproc[i] = ceil(n_left / (size - i))
-            n_left -= n_pproc[i]
+            start_i = i * simulations_per_CPU
+            end_i   = start_i + simulations_per_CPU
+            if start_i >= t_end:
+                break
+            n_pproc[i] = max(0, min(simulations_per_CPU, Nt_sel - start_i))
     else:
-        Nt_sel, n_pproc, t_end = None, None, None
+        Nt_sel, n_pproc, t_end, time_indices = None, None, None, None
+        
+    # Broadcast basic info
+    time_indices = comm.bcast(time_indices, root=root)
+    Nt_sel       = comm.bcast(Nt_sel, root=root)
+    n_pproc      = comm.bcast(n_pproc, root=root)
+    t_end        = comm.bcast(t_end, root=root)
 
-    # Broadcast metadata to all ranks
-    Nt_sel = comm.bcast(Nt_sel, root=root)
-    n_pproc = comm.bcast(n_pproc, root=root)
-    t_end = comm.bcast(t_end, root=root)
-
-    # Determine local timesteps
-    start_idx = t_start + np.sum(n_pproc[:rank])
+    # Each rank determines its time indices
+    start_idx = np.sum(n_pproc[:rank])
     end_idx = start_idx + n_pproc[rank]
-    local_times = np.arange(start_idx, end_idx)
+    local_times = time_indices[start_idx:end_idx]
+    
+    if rank == root:
+        print(f"Distributed {Nt_sel} time steps among {size} ranks → {n_pproc} per rank")
 
-    # Prepare local output
+    # Prepare local results
     outp_local = np.zeros(len(local_times) * 2, dtype=float)
 
-    # Read HDF5 dataset once
-    with h5.File(h5_filename, "r") as f:
-        delta_ne = f["fields/n"]
+    # # Each rank processes its local timesteps
 
-    # Compute local times for this rank
-    local_times = np.arange(start_idx, end_idx)
+    for i, t in enumerate(local_times):
+        print(t)
+        local_inp = copy.deepcopy(input_data)
+        if rank == root:
+            local_inp.save_diag = True
+        else:
+            local_inp.save_diag = False
+        
+        with h5.File(h5_filename, "r", libver='latest', swmr=True) as f:
+            # nk = f['fields/uk'][t, 1]
+            nk = f['fields/density/nk'][t]
+            print(nk.shape)
+        # delta_ne = np.fft.irfft2(nk, norm = 'forward')
+        n = np.fft.irfft2(nk, norm = 'forward')
+        # delta_ne = n[652:1676]
+        # delta_ne = n[1601:2287, 1601:2287]
+        delta_ne = n[-1500:,-1500:]
+        ne_tot = ne_lin * (1 + fluct_lvl * delta_ne / delta_ne.max())
+        local_inp.ne = ne_tot.T.astype(np.double)
+        amp, phase = fw2d_wrapper(local_inp)
 
-    # Split local_times into chunks
-    chunks = [c for c in np.array_split(local_times, simulations_per_CPU) if len(c) > 0]
+        # amp, phase = fw2d_wrapper(input_data, rank == root)
+        outp_local[2*i] = amp
+        outp_local[2*i+1] = phase
 
-    for j, chunk in enumerate(chunks):
-        for i, t in enumerate(chunk):
-            global_idx = t  # you can use t directly if you want global reference
-            print(f"Chunk {j}, Local timestep {t}, Global timestep {global_idx}")
+        print(f"[Rank {rank}] Finished timestep {t}")
 
-            delta_ne_t = delta_ne[t, :, :]
-            ne_tot = ne_lin * (1 + fluct_lvl * delta_ne_t)
-            input_data.ne = ne_tot.astype(np.double)
-            outp_local[2*i], outp_local[2*i+1] = fw2d_wrapper(input_data, rank == root)
-
-
-    # Prepare for Gatherv
+    # Gather to root
     outp_sendc = 2 * n_pproc
     outp_displ = np.cumsum(outp_sendc) - outp_sendc
 

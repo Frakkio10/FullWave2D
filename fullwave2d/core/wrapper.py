@@ -276,6 +276,7 @@ class InputData (object):
 
         self.ampl_inc  = ampl
         self.phase_inc = phase
+        self.phase_ref = phase  # for gaussian, reference = phase_inc
 
     def _horn_setup(self):
         """
@@ -294,13 +295,17 @@ class InputData (object):
         ampl = np.where(np.abs(y - y_ant) <= self.horn_width / 2, 1.0, 0.0)
         ampl = np.flip(ampl, axis=0)
 
-        # quadratic phase from horn geometry + tilt
-        phase_horn = np.pi * (y - y_ant) ** 2 / (self.lam * self.horn_length)
+        # tilt phase only — reference for PCR demodulation
         phase_tilt = np.cumsum(np.ones_like(y) * (-2 * np.pi * self.f0 / c * dx * np.sin(alp)))
-        phase = (phase_horn + phase_tilt + np.pi) % (2 * np.pi) - np.pi
+        phase_tilt = (phase_tilt + np.pi) % (2 * np.pi) - np.pi
+
+        # full phase including horn curvature — used for sourcing the field
+        phase_horn = np.pi * (y - y_ant) ** 2 / (self.lam * self.horn_length)
+        phase_full = (phase_horn + phase_tilt + np.pi) % (2 * np.pi) - np.pi
 
         self.ampl_inc  = ampl
-        self.phase_inc = phase
+        self.phase_inc = phase_full   # sourcing ez_inc in C
+        self.phase_ref = phase_tilt   # PCR demodulation reference
 
 
     def get_tracing_data(self, antenna='difdop'):
@@ -365,9 +370,12 @@ class OutputData (object):
         - outp.ez_inc: reference field (without plasma i.e. free propagation)
         - outp.doppler_data: Amplitude and phase evolution (as a result of
                             parallelized simulation sequence)
-        - outp.recv_IQ: IQ time series per receiver (PCR mode only),
-                shape (n_timesteps, n_recv * 2) with columns
-                [I_r0, Q_r0, I_r1, Q_r1, ...]
+        - outp.recv_ampl: amplitude time series per receiver (PCR mode only),
+                        shape (n_timesteps, n_recv)
+        - outp.recv_phase: phase time series per receiver (PCR mode only),
+                        shape (n_timesteps, n_recv)
+        - outp.recv_S:    complex signal per receiver (PCR mode only),
+                        shape (n_timesteps, n_recv), computed as ampl * exp(i*phase)
     """
     def __init__(self, name, subdir=None, compress_factor=1, **kwargs):
 
@@ -391,8 +399,11 @@ class OutputData (object):
             self.doppler_data = np.load(self.outp_dir / 'ampl_phase.npy')
             
         # if it exists, load the PCR receiver data:
-        if Path(self.outp_dir / 'recv_IQ.npy').exists():
-            self.recv_IQ = np.load(self.outp_dir / 'recv_IQ.npy')
+        if Path(self.outp_dir / 'recv_ampl_phase.npy').exists():
+            recv_data = np.load(self.outp_dir / 'recv_ampl_phase.npy')
+            self.recv_ampl  = recv_data[:, 0::2]   # shape (n_timesteps, n_recv)
+            self.recv_phase = recv_data[:, 1::2]   # shape (n_timesteps, n_recv)
+            self.recv_S     = self.recv_ampl * np.exp(1j * self.recv_phase)  # complex signal
 
     def save_to_pickle(self, path, mkdir=False):
         """ Save this class instance to a binary .pkl file """
@@ -643,16 +654,28 @@ def fw2d_wrapper(inp, make_outp_dir=True):
     ampl = ctypes.c_double(0.0)
     phase = ctypes.c_double(0.0)
 
-    ampl_incpp = to_double_pointer(inp.ampl_inc)
-    phase_incpp = to_double_pointer(inp.phase_inc)
-    
-    # PCR receiver array
-    n_recv = ctypes.c_int(inp.n_recv)
-    yrecv = np.ascontiguousarray(inp.yrecv if inp.n_recv > 0 else np.array([0], dtype=np.int32),
-    dtype=np.int32)    
-    recv_width = ctypes.c_int(inp.recv_width)
-    ampl_recv  = (ctypes.c_double * inp.n_recv)(*([0.0] * max(inp.n_recv, 1)))
-    fase_recv  = (ctypes.c_double * inp.n_recv)(*([0.0] * max(inp.n_recv, 1)))
+    ampl_inc  = inp.ampl_inc.reshape(-1, 1) if inp.ampl_inc.ndim == 1 else inp.ampl_inc
+    phase_inc = inp.phase_inc.reshape(-1, 1) if inp.phase_inc.ndim == 1 else inp.phase_inc
+
+    ampl_incpp  = to_double_pointer(ampl_inc)
+    phase_incpp = to_double_pointer(phase_inc)
+    # PCR receiver array — getattr for backward compatibility with old DBS inputs
+    n_recv_val     = getattr(inp, 'n_recv', 0)
+    yrecv_val      = getattr(inp, 'yrecv', np.array([], dtype=np.int32))
+    recv_width_val = getattr(inp, 'recv_width', 0)
+
+    n_recv     = ctypes.c_int(n_recv_val)
+    yrecv      = np.ascontiguousarray(
+        yrecv_val if n_recv_val > 0 else np.array([0], dtype=np.int32),
+        dtype=np.int32)
+    recv_width = ctypes.c_int(recv_width_val)
+
+    if n_recv_val > 0:
+        ampl_recv = (ctypes.c_double * n_recv_val)(*([0.0] * n_recv_val))
+        fase_recv = (ctypes.c_double * n_recv_val)(*([0.0] * n_recv_val))
+    else:
+        ampl_recv = (ctypes.c_double * 1)(0.0)
+        fase_recv = (ctypes.c_double * 1)(0.0)
     
     maxw(
          ctypes.c_double(inp.f0),
@@ -692,8 +715,8 @@ def fw2d_wrapper(inp, make_outp_dir=True):
     # fn_field_anim= Path(outp_dir) / 'ez_anim.dat'
     fn_antenna   = Path(outp_dir) / 'ant_signal_t.dat'
     
-    # convert recv_IQ.dat to npy if it exists
-    fn_recv = Path(outp_dir) / 'recv_IQ.dat'
+    # convert recv_ampl_phase.dat to npy if it exists
+    fn_recv = Path(outp_dir) / 'recv_ampl_phase.dat'
     if fn_recv.exists():
         OutputData.txt_to_npy(fn_recv, override=True)
         
