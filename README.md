@@ -6,7 +6,7 @@
 The git repository is private. To get access, send an email to francesco.orlacchio@lpp.polytechnique.fr
 
 ```bash
-git clone [https://github.com/SaschaRienaecker/FullWave2D.git](https://github.com/Frakkio10/FullWave2D.git)
+git clone https://github.com/Frakkio10/FullWave2D.git
 ```
 Note that git integration is made a lot easier using e.g. VSCode and linking your GitHub account to it. See below for more details.
 
