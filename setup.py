@@ -14,7 +14,7 @@ setup(
         'pandas',
         'h5py',
         'mpi4py',
-        'matlabtools @ git+https://github.com/Frakkio10/matlabtools.git@master',
+        'matlabtools @ git+https://github.com/Frakkio10/pythonmatlabtools.git@master',
     ],
     classifiers=[
         # 'Development Status :: 3 - Alpha',
