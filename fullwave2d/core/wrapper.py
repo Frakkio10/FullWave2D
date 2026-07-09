@@ -587,7 +587,7 @@ def to_double_pointer(arr):
     return (arr.ctypes.data + np.arange(arr.shape[0]) * arr.strides[0]).astype(np.uintp)
 
 
-def fw2d_wrapper(inp, make_outp_dir=True):
+def fw2d_wrapper(inp, make_outp_dir=True, return_pcr=True):
 
     """
     Performs the type conversion via ctypes in order to pass
@@ -748,8 +748,14 @@ def fw2d_wrapper(inp, make_outp_dir=True):
     #     OutputData.extract(inp.name, subdir, new_subdir)
 
 
-    return ampl.value, phase.value
+    # collect PCR output directly from ctypes arrays
+    ampl_recv_out = list(ampl_recv)[:n_recv_val] if n_recv_val > 0 else []
+    fase_recv_out = list(fase_recv)[:n_recv_val] if n_recv_val > 0 else []
 
+    if return_pcr:
+        return ampl.value, phase.value, ampl_recv_out, fase_recv_out
+    else:
+        return ampl.value, phase.value
 # %%
 
 def transform_resolution(arr, ny, nx):

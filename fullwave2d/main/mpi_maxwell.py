@@ -440,19 +440,14 @@ def scatterv_maxwell_from_h5(input_data, ne_lin, h5_filename,
         ne_tot = ne_lin * (1 + fluct_lvl * delta_ne)
         local_inp.ne = ne_tot.T.astype(np.double)
         # amp, phase = fw2d_wrapper(local_inp, rank == root)
-        amp, phase = fw2d_wrapper(local_inp)
+        amp, phase, ampl_recv, fase_recv = fw2d_wrapper(local_inp, return_pcr=True)
         outp_local[n_out*i]   = amp
         outp_local[n_out*i+1] = phase
 
         if n_recv > 0:
-            recv_path = local_inp.get_outp_dir() / 'recv_ampl_phase.npy'
-            if recv_path.exists():
-                recv_data  = np.load(recv_path)
-                ampl_recv  = recv_data[-1, 0::2]  # (n_recv,)
-                phase_recv = recv_data[-1, 1::2]  # (n_recv,)
-                for r in range(n_recv):
-                    outp_local[n_out*i + 2 + 2*r]     = ampl_recv[r]
-                    outp_local[n_out*i + 2 + 2*r + 1] = phase_recv[r]
+            for r in range(n_recv):
+                outp_local[n_out*i + 2 + 2*r]     = ampl_recv[r]
+                outp_local[n_out*i + 2 + 2*r + 1] = fase_recv[r]
 
         print(f"[Rank {rank}] Finished timestep {t}")
 
@@ -490,7 +485,9 @@ def scatterv_maxwell_HW(input_data, ne_lin, h5_filename,
         fluct_lvl   : multiplicative factor for delta_ne
 
     Returns:
-        On root: (Nt_sel, 2) array [amplitude, phase]
+        On root: (Nt_sel, 2 + 2*n_recv) array
+                 columns: [amp_dbs, phase_dbs, ampl_r0, phase_r0, ...]
+                 For DBS (n_recv=0): (Nt_sel, 2) backward compatible
         On others: None
     """
 
@@ -556,7 +553,9 @@ def scatterv_maxwell_HW(input_data, ne_lin, h5_filename,
         print(f"Distributed {Nt_sel} time steps among {size} ranks → {n_pproc} per rank")
 
     # Prepare local results
-    outp_local = np.zeros(len(local_times) * 2, dtype=float)
+    n_recv = getattr(input_data, 'n_recv', 0)
+    n_out  = 2 + 2 * n_recv
+    outp_local = np.zeros(len(local_times) * n_out, dtype=float)
 
     # # Each rank processes its local timesteps
 
@@ -579,25 +578,45 @@ def scatterv_maxwell_HW(input_data, ne_lin, h5_filename,
         delta_ne = n[-1500:,-1500:]
         ne_tot = ne_lin * (1 + fluct_lvl * delta_ne / delta_ne.max())
         local_inp.ne = ne_tot.T.astype(np.double)
-        amp, phase = fw2d_wrapper(local_inp)
+        #amp, phase = fw2d_wrapper(local_inp)
 
         # amp, phase = fw2d_wrapper(input_data, rank == root)
-        outp_local[2*i] = amp
-        outp_local[2*i+1] = phase
+        #outp_local[n_out*i]   = amp
+        #outp_local[n_out*i+1] = phase
+        
+        amp, phase, ampl_recv, fase_recv = fw2d_wrapper(local_inp, return_pcr=True)
+        outp_local[n_out*i]   = amp
+        outp_local[n_out*i+1] = phase
+
+        if n_recv > 0:
+            for r in range(n_recv):
+                outp_local[n_out*i + 2 + 2*r]     = ampl_recv[r]
+                outp_local[n_out*i + 2 + 2*r + 1] = fase_recv[r]
+                
+        #if n_recv > 0:
+        #    recv_path = local_inp.get_outp_dir() / 'recv_ampl_phase.npy'
+        #    if recv_path.exists():
+        #        recv_data  = np.load(recv_path)
+        #        ampl_recv  = recv_data[-1, 0::2]
+        #        phase_recv = recv_data[-1, 1::2]
+        #        for r in range(n_recv):
+        #            outp_local[n_out*i + 2 + 2*r]     = ampl_recv[r]
+        #            outp_local[n_out*i + 2 + 2*r + 1] = phase_recv[r]
 
         print(f"[Rank {rank}] Finished timestep {t}")
 
     # Gather to root
-    outp_sendc = 2 * n_pproc
+    outp_sendc = n_out * n_pproc
     outp_displ = np.cumsum(outp_sendc) - outp_sendc
 
     if rank == root:
-        outp_gathered = np.zeros(Nt_sel * 2, dtype=float)
+        outp_gathered = np.zeros(Nt_sel * n_out, dtype=float)
     else:
         outp_gathered = None
 
     comm.Gatherv(outp_local, [outp_gathered, outp_sendc, outp_displ, MPI.DOUBLE], root=root)
 
     if rank == root:
-        return outp_gathered.reshape(Nt_sel, 2)
+        return outp_gathered.reshape(Nt_sel, n_out)
+        # columns: [amp_dbs, phase_dbs, ampl_r0, phase_r0, ...]
     return None
